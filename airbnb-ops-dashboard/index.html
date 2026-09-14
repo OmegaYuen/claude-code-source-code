@@ -391,7 +391,10 @@ async function boot(){
   let ready=0; const first=()=>{ if(++ready===4){ setSync(); firstPopup(); } };
   let f1,f2,f3,f4;
   sub("reservations",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.id||d.id]=v; } }); S.res=o; render(); if(!f1){f1=1;first();} });
-  sub("requests",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.id||d.id]=v; } }); S.req=o; render(); if(!f2){f2=1;first();} });
+  sub("requests",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.id||d.id]=v; } }); S.req=o; render();
+    if(!f2){f2=1;first();} else { /* a request arrived while the board is open (Hotmail reader, another device): surface it */
+      const fresh=snap.docChanges().filter(c=>c.type==="added"&&c.doc.data()?.status==="new");
+      if(fresh.length){ if(!UI.overlay) openSheet({type:"popup"}); else toast(`${fresh.length} new request${fresh.length>1?"s":""}`); } } });
   sub("units",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.code||d.id]=v; } }); S.units=o; render(); if(!f3){f3=1;first();} });
   db.doc("meta/dispatcher").onSnapshot(d=>{ S.dispatcher=d.exists?d.data():null; renderOutbox(); },()=>{});
   db.doc("meta/config").get().then(d=>{ if(d.exists){ const c=d.data(); if(c.groups) CFG.groups=c.groups; if(c.delivery) CFG.delivery=c.delivery; render(); } }).catch(()=>{});

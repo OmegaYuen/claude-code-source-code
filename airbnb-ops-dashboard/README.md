@@ -51,7 +51,7 @@ is done, tap the unit box → *Cleaning done · unit ready* and the box turns gr
 | Data | Source today | How it gets in |
 |---|---|---|
 | Today's check-outs / check-ins | `today schedule/DDMMYY.xlsx` in Google Drive (Type, Unit Number, Listing Name, Guest, Date, Note) | ⋯ → *Import today's schedule*: paste the rows. Same confirmation code updates, never duplicates. |
-| Guest requirements | Guest brief `.docx` / Airbnb messages / Hotmail | *+ Add* on the requests pane, or *+ Request* inside a reservation. Paste the guest's message. |
+| Guest requirements, arrival-time changes | Airbnb emails in the Hotmail inbox | Read automatically by the Mac mini loop (`dispatcher/README.md`, Hotmail reader). New requests pop up on the board; ETA changes update the reservation and notify the Airbnb team. Manual fallback: *+ Add* on the requests pane. |
 | Cleaning issues | Airbnb cleaning chat | *Report issue* on the unit box, then WhatsApp it to management |
 | Unit list | `Listing Unit Map (1).xlsx` | Built into `index.html` (`UNIT_MAP`). Edit there when units are added. |
 | Booking amount | Booking monitoring file (not wired yet) | *Edit* next to Booking in the reservation sheet. The header tile sums whatever is entered. |
@@ -81,5 +81,5 @@ latest 200 messages on screen.
 ## Not yet wired (next steps)
 
 - Automatic pull of the daily schedule file from Drive each morning.
-- Hotmail / Airbnb message inbox → automatic request creation.
+- Reading the WhatsApp cleaning chat so "unit done" and issues update the board by themselves.
 - Booking amounts from the booking monitoring file.

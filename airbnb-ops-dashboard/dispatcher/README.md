@@ -33,17 +33,49 @@ message into the WhatsApp group. No tap in WhatsApp.
    change that one line).
 5. Keep the Mac mini awake: System Settings → Energy → *Prevent automatic sleeping*.
 
+## Hotmail reader (inbound)
+
+The same loop also reads the Hotmail inbox and puts new Airbnb guest messages on the board.
+
+- Guest asks for something (cot, early check-in, parking, "there are ants") → a request pops
+  up on the board; one tap sends it to the cleaning team or management by WhatsApp.
+- Guest gives or changes an arrival time → the reservation's expected time is updated on the
+  board and an `ARRIVAL UPDATE` goes to the Airbnb team group.
+- Trip changes, cancellations, guest-count changes → high-priority request.
+- Reviews, payouts, marketing → ignored.
+
+It reads through **Apple Mail**, because Outlook.com no longer accepts plain IMAP passwords
+and Mail already handles the Microsoft sign-in.
+
+Setup, once:
+
+1. Apple Mail → Settings → Accounts → add the Hotmail account (Microsoft Exchange / Outlook).
+   Let it sync the inbox.
+2. First run of the reader triggers a macOS prompt "Terminal wants to control Mail" → Allow.
+3. Test by hand:
+
+   ```bash
+   python3 airbnb-ops-dashboard/dispatcher/fetch_mail.py --hours 24 | head -40
+   ```
+
+   You should see the latest Airbnb emails as JSON. If the account name is ambiguous, pass
+   `--account "Hotmail"` (the error lists the names Mail knows).
+
+The reader never replies, moves, deletes or marks mail. It remembers which emails it has
+handled in the board's database (`meta/mail`), so restarting it never creates duplicates.
+
 ## Run it
 
 In this repo on the Mac mini:
 
 ```
 claude
-/loop 2m /dispatch-whatsapp
+/loop 2m /ops-loop
 ```
 
-Leave that terminal open. Every two minutes the skill checks the queue. A quiet pass costs one
-small tool call.
+Leave that terminal open. Every two minutes the loop sends whatever is queued and reads new
+mail. A quiet pass costs a couple of small tool calls. (`/dispatch-whatsapp` and
+`/read-hotmail` also run on their own.)
 
 To stop: `/loop stop` or close the session. The board falls back to tap delivery
 automatically once the heartbeat goes stale.
