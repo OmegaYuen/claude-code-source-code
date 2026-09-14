@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#0B8F86"/>
+  <!-- twin towers -->
+  <g fill="#FFFFFF" fill-opacity=".92">
+    <rect x="128" y="176" width="72" height="232" rx="10"/>
+    <rect x="312" y="176" width="72" height="232" rx="10"/>
+    <rect x="200" y="272" width="112" height="22" rx="6"/>
+    <rect x="152" y="112" width="24" height="64" rx="6"/>
+    <rect x="336" y="112" width="24" height="64" rx="6"/>
+  </g>
+  <!-- status boxes -->
+  <g>
+    <rect x="128" y="428" width="56" height="28" rx="7" fill="#2A9A58"/>
+    <rect x="196" y="428" width="56" height="28" rx="7" fill="#2A9A58"/>
+    <rect x="264" y="428" width="56" height="28" rx="7" fill="#F4C25B"/>
+    <rect x="332" y="428" width="52" height="28" rx="7" fill="#2A9A58"/>
+  </g>
+</svg>

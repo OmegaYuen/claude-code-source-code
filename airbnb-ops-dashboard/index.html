@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Acelence Ops Board</title>
+<meta name="description" content="Daily Airbnb operations board: today's check-outs and arrivals, unit cleaning status, guest requests and the team feed.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ops Board">
+<meta name="theme-color" content="#0B8F86">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* ---------- tokens ---------- */
+:root{
+  --bg:#F2F4F1; --surface:#FFFFFF; --surface-2:#E8ECE7; --surface-3:#DDE3DE;
+  --ink:#14202E; --ink-2:#4B5663; --ink-3:#7A8592; --line:#D6DCD7; --line-2:#C3CBC5;
+  --accent:#0B8F86; --accent-soft:#D6F0EC; --accent-ink:#FFFFFF;
+  --ok:#2A9A58; --ok-soft:#DCF3E3; --warn:#D48F0A; --warn-soft:#FBEFD2;
+  --bad:#D5432B; --bad-soft:#FBDFD9; --info:#2F6FE4; --info-soft:#DCE6FB;
+  --occ:#6F7C8A; --occ-soft:#E3E8ED; --clean:#7A4FD1; --clean-soft:#E9E0FA;
+  --shadow:0 10px 30px rgba(20,32,46,.12); --radius:14px;
+  --display:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  --body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E141B; --surface:#161E27; --surface-2:#1E2833; --surface-3:#28343F;
+    --ink:#EDF1F0; --ink-2:#B3BDC5; --ink-3:#7E8A95; --line:#2A3641; --line-2:#3A4855;
+    --accent:#2FB8AE; --accent-soft:#12403D; --accent-ink:#06211F;
+    --ok:#3FB86C; --ok-soft:#153D26; --warn:#E8A72A; --warn-soft:#3F2F0E;
+    --bad:#EF6A52; --bad-soft:#47201A; --info:#5E93F2; --info-soft:#1A2C4E;
+    --occ:#8D9AA7; --occ-soft:#2A333C; --clean:#A78BF0; --clean-soft:#2D2346;
+    --shadow:0 12px 34px rgba(0,0,0,.45); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E141B; --surface:#161E27; --surface-2:#1E2833; --surface-3:#28343F;
+  --ink:#EDF1F0; --ink-2:#B3BDC5; --ink-3:#7E8A95; --line:#2A3641; --line-2:#3A4855;
+  --accent:#2FB8AE; --accent-soft:#12403D; --accent-ink:#06211F;
+  --ok:#3FB86C; --ok-soft:#153D26; --warn:#E8A72A; --warn-soft:#3F2F0E;
+  --bad:#EF6A52; --bad-soft:#47201A; --info:#5E93F2; --info-soft:#1A2C4E;
+  --occ:#8D9AA7; --occ-soft:#2A333C; --clean:#A78BF0; --clean-soft:#2D2346;
+  --shadow:0 12px 34px rgba(0,0,0,.45); color-scheme:dark;
+}
+
+/* ---------- base ---------- */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;
+  padding-inline:max(16px,env(safe-area-inset-left)) max(16px,env(safe-area-inset-right));padding-block:0 max(12px,env(safe-area-inset-bottom));}
+h1,h2,h3{margin:0;font-family:var(--display);letter-spacing:-.01em;text-wrap:balance}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;width:100%}
+textarea{min-height:88px;resize:vertical}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-3)}
+.small{font-size:13px}
+.label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+a{color:var(--accent)}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- header ---------- */
+.top{position:sticky;top:0;z-index:20;background:var(--bg);padding-top:max(10px,env(safe-area-inset-top));}
+.brandbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-block:8px 6px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .mark{width:34px;height:34px;border-radius:9px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:16px}
+.brand h1{font-size:20px;font-weight:700}
+.brand .sub{font-size:13px;color:var(--ink-3)}
+.clock{font-family:var(--mono);font-size:22px;font-weight:700;letter-spacing:-.02em}
+.clock small{display:block;font:500 12px var(--body);color:var(--ink-3);letter-spacing:0}
+.spacer{flex:1}
+.chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px;font-weight:500}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.chip.live .dot{background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
+.chip.local .dot{background:var(--warn)}
+.chip.bell{position:relative}
+.chip.bell .n{background:var(--bad);color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding-block:6px 10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.stat .v{font-family:var(--display);font-size:24px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+.stat .v span{font-size:14px;color:var(--ink-3);font-weight:600}
+.stat .k{font-size:12px;color:var(--ink-2);font-weight:500}
+.stat .bar{height:4px;border-radius:4px;background:var(--surface-3);margin-top:6px;overflow:hidden}
+.stat .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.stat.warn .bar i{background:var(--warn)} .stat.ok .bar i{background:var(--ok)} .stat.bad .v{color:var(--bad)}
+
+.tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:12px;margin-block:0 10px}
+.tabs button{flex:1;padding:9px 6px;border-radius:9px;font-weight:600;font-size:14px;color:var(--ink-2);display:flex;justify-content:center;align-items:center;gap:6px}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.tabs .n{font-size:11px;font-weight:700;background:var(--surface-3);border-radius:999px;padding:1px 6px;color:var(--ink-2)}
+.tabs .n.hot{background:var(--bad);color:#fff}
+
+/* ---------- panes ---------- */
+.panes{display:grid;gap:14px;grid-template-columns:1fr;align-items:start}
+.pane{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;min-width:0}
+.pane header{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.pane header h2{font-size:17px;font-weight:700}
+.pane header .cnt{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.pane header .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+@media (min-width:1100px){
+  .tabs{display:none}
+  .panes{grid-template-columns:minmax(360px,1.15fr) minmax(380px,1.35fr) minmax(300px,.9fr)}
+  .pane[data-pane]{display:block!important}
+  .pane.tall{max-height:calc(100vh - 210px);overflow:auto}
+  .rail{display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 210px);overflow:auto;min-width:0}
+}
+@media (max-width:1099px){
+  .rail{display:contents}
+  .pane[data-pane]{display:none}
+  .pane[data-pane].on{display:block}
+}
+
+/* ---------- reservation cards ---------- */
+.grp{margin-bottom:14px}
+.grp>.label{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.grp>.label::after{content:"";flex:1;height:1px;background:var(--line)}
+.rlist{display:flex;flex-direction:column;gap:8px}
+.res{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);border-left:5px solid var(--line-2);transition:background .15s}
+.res:hover{background:var(--surface-2)}
+.res.done{opacity:.72;border-left-color:var(--ok)}
+.res.out{border-left-color:var(--warn)} .res.out.done{border-left-color:var(--ok)}
+.res.in{border-left-color:var(--info)} .res.in.done{border-left-color:var(--ok)}
+.res .time{font-family:var(--mono);font-weight:700;font-size:15px;line-height:1.2;min-width:64px}
+.res .time small{display:block;font:500 11px var(--body);color:var(--ink-3)}
+.res .main{min-width:0}
+.res .unit{font-family:var(--mono);font-weight:700;font-size:16px}
+.res .unit.q{color:var(--bad)}
+.res .guest{font-weight:600}
+.res .meta{font-size:13px;color:var(--ink-2);margin-top:2px;overflow-wrap:anywhere}
+.res .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.tag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;background:var(--surface-2);color:var(--ink-2);letter-spacing:.02em}
+.tag.warn{background:var(--warn-soft);color:var(--warn)} .tag.bad{background:var(--bad-soft);color:var(--bad)} .tag.info{background:var(--info-soft);color:var(--info)} .tag.ok{background:var(--ok-soft);color:var(--ok)} .tag.clean{background:var(--clean-soft);color:var(--clean)}
+.res .acts{grid-column:1/-1;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:9px;font-weight:600;font-size:13px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);white-space:nowrap;min-height:36px}
+.btn:hover{background:var(--surface-3)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.ok{background:var(--ok);color:#fff;border-color:transparent}
+.btn.info{background:var(--info);color:#fff;border-color:transparent}
+.btn.bad{background:var(--bad);color:#fff;border-color:transparent}
+.btn.clean{background:var(--clean);color:#fff;border-color:transparent}
+.btn.ghost{background:transparent}
+.btn.sm{padding:5px 9px;min-height:30px;font-size:12px}
+.btn[disabled]{opacity:.5;cursor:default}
+.empty{padding:22px 12px;text-align:center;color:var(--ink-3);border:1px dashed var(--line-2);border-radius:12px;font-size:14px}
+
+/* ---------- unit board ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:8px 12px;font-size:12px;color:var(--ink-2);margin-bottom:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.bld{margin-bottom:12px}
+.bld .label{margin-bottom:6px;display:flex;gap:8px;align-items:center}
+.bld .label b{color:var(--ink);font-size:12px}
+.ugrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:7px}
+.ubox{position:relative;text-align:left;border-radius:10px;padding:9px 10px 8px;border:1px solid var(--line);background:var(--surface-2);min-height:64px;display:flex;flex-direction:column;justify-content:space-between;gap:4px;transition:transform .12s, box-shadow .12s}
+.ubox:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.ubox .code{font-family:var(--mono);font-weight:700;font-size:14px;letter-spacing:-.01em}
+.ubox .st{font-size:11px;font-weight:600;line-height:1.2}
+.ubox .who{font-size:11px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ubox[data-st="idle"]{color:var(--ink-3)} .ubox[data-st="idle"] .code{color:var(--ink-2)}
+.ubox[data-st="occupied"]{background:var(--occ-soft);border-color:transparent;color:var(--occ)} .ubox[data-st="occupied"] .code{color:var(--ink)}
+.ubox[data-st="checkout"]{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)} .ubox[data-st="checkout"] .code{color:var(--ink)}
+.ubox[data-st="toclean"]{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)} .ubox[data-st="toclean"] .code{color:var(--ink)}
+.ubox[data-st="cleaning"]{background:var(--clean-soft);border-color:var(--clean);color:var(--clean)} .ubox[data-st="cleaning"] .code{color:var(--ink)}
+.ubox[data-st="prep"]{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)} .ubox[data-st="prep"] .code{color:var(--ink)}
+.ubox[data-st="ready"]{background:var(--ok);border-color:var(--ok);color:#fff} .ubox[data-st="ready"] .who{color:rgba(255,255,255,.85)}
+.ubox[data-st="arrived"]{background:var(--info);border-color:var(--info);color:#fff} .ubox[data-st="arrived"] .who{color:rgba(255,255,255,.85)}
+.ubox .flag{position:absolute;top:6px;right:7px;width:8px;height:8px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--surface)}
+
+/* ---------- requests ---------- */
+.rq{border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px;background:var(--surface);border-left:5px solid var(--bad)}
+.rq.sent{border-left-color:var(--info)} .rq.done{border-left-color:var(--ok);opacity:.7}
+.rq.issue{border-left-color:var(--clean)}
+.rq .head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rq .head .unit{font-family:var(--mono);font-weight:700}
+.rq .head .guest{font-weight:600}
+.rq .head .src{margin-left:auto;font-size:11px;color:var(--ink-3)}
+.rq .txt{margin:6px 0 8px;overflow-wrap:anywhere}
+.rq .acts{display:flex;flex-wrap:wrap;gap:6px}
+.rq .state{font-size:12px;color:var(--ink-2);margin-top:6px}
+
+/* ---------- feed ---------- */
+.ffilter{display:flex;gap:4px;margin-bottom:10px}
+.ffilter button{padding:6px 10px;border-radius:8px;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--surface-2)}
+.ffilter button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.msg{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.msg:last-child{border-bottom:0}
+.msg .k{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:11px;font-weight:800;letter-spacing:.02em;background:var(--surface-2);color:var(--ink-2)}
+.msg .k.out{background:var(--warn-soft);color:var(--warn)} .msg .k.in{background:var(--info-soft);color:var(--info)} .msg .k.clean{background:var(--ok-soft);color:var(--ok)} .msg .k.rq{background:var(--bad-soft);color:var(--bad)} .msg .k.eta{background:var(--accent-soft);color:var(--accent)} .msg .k.issue{background:var(--clean-soft);color:var(--clean)}
+.msg .b{min-width:0}
+.msg .t{overflow-wrap:anywhere}
+.msg .m{font-size:12px;color:var(--ink-3);display:flex;gap:8px;flex-wrap:wrap;margin-top:3px;align-items:center}
+.msg .m .ch{font-weight:600;color:var(--ink-2)}
+.msg .m a,.msg .m button{font-size:12px;color:var(--accent);font-weight:600;text-decoration:none}
+.compose{display:flex;gap:6px;margin-bottom:10px}
+.compose input{flex:1}
+
+/* ---------- overlays ---------- */
+.scrim{position:fixed;inset:0;background:rgba(10,16,24,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center;padding:0}
+@media (min-width:700px){.scrim{align-items:center;padding:20px}}
+.sheet{background:var(--surface);color:var(--ink);width:100%;max-width:640px;max-height:min(88vh,900px);overflow:auto;border-radius:18px 18px 0 0;padding:18px 18px max(18px,env(safe-area-inset-bottom));box-shadow:var(--shadow);animation:up .18s ease-out}
+@media (min-width:700px){.sheet{border-radius:18px}}
+@keyframes up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+.sheet h2{font-size:20px;font-weight:800;margin-bottom:4px}
+.sheet .sub{color:var(--ink-2);font-size:14px;margin-bottom:12px}
+.sheet .close{position:absolute;right:14px;top:12px;width:34px;height:34px;border-radius:50%;background:var(--surface-2);font-size:18px}
+.sheet .sec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
+.kv dt{color:var(--ink-3);font-weight:500;margin:0}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.field{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.field label{font-size:12px;font-weight:600;color:var(--ink-2)}
+.popup{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px;background:var(--surface-2)}
+.popup .h{display:flex;gap:8px;align-items:baseline}
+.popup .h .unit{font-family:var(--mono);font-weight:700}
+.rolepick{display:grid;gap:8px;grid-template-columns:1fr;margin-top:8px}
+.rolepick button{text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);display:flex;flex-direction:column;gap:2px}
+.rolepick button b{font-family:var(--display);font-size:16px}
+.rolepick button span{font-size:13px;color:var(--ink-2)}
+.rolepick button:hover{border-color:var(--accent)}
+#toasts{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;z-index:60;pointer-events:none}
+.toast{background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:60;box-shadow:var(--shadow);animation:up .18s ease-out;max-width:calc(100vw - 32px)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brandbar">
+    <div class="brand">
+      <div class="mark">A</div>
+      <div><h1>Acelence Ops Board</h1><div class="sub" id="dateline">Today</div></div>
+    </div>
+    <div class="clock" id="clock">--:--<small>Kuala Lumpur</small></div>
+    <div class="spacer"></div>
+    <div class="chips">
+      <button class="chip bell" id="bell" title="Open requests"><span>Requests</span><span class="n" id="belln">0</span></button>
+      <button class="chip" id="rolechip" title="Change who is using this device"><span class="dot"></span><span id="rolename">Choose role</span></button>
+      <span class="chip" id="sync"><span class="dot"></span><span id="synct">Connecting…</span></span>
+      <button class="chip" id="settings" title="Import schedule, add reservation">⋯</button>
+    </div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="today">Today <span class="n" id="tn-today">0</span></button>
+    <button role="tab" data-tab="units">Units <span class="n" id="tn-units">0</span></button>
+    <button role="tab" data-tab="requests">Requests <span class="n" id="tn-requests">0</span></button>
+    <button role="tab" data-tab="feed">Team <span class="n" id="tn-feed">0</span></button>
+  </div>
+</div>
+
+<div class="panes">
+  <section class="pane tall" data-pane="today">
+    <header><h2>Today's schedule</h2><span class="cnt" id="today-cnt"></span><div class="right"><button class="btn sm ghost" id="addres">+ Reservation</button></div></header>
+    <div id="today"></div>
+  </section>
+  <section class="pane tall" data-pane="units">
+    <header><h2>Unit board</h2><span class="cnt" id="units-cnt"></span></header>
+    <div class="legend">
+      <span><i style="background:var(--warn)"></i>Check-out / prepare</span>
+      <span><i style="background:var(--bad)"></i>Needs cleaning</span>
+      <span><i style="background:var(--clean)"></i>Cleaning now</span>
+      <span><i style="background:var(--ok)"></i>Cleaned &amp; ready</span>
+      <span><i style="background:var(--info)"></i>Guest arrived</span>
+      <span><i style="background:var(--occ)"></i>Occupied</span>
+    </div>
+    <div id="units"></div>
+  </section>
+  <div class="rail">
+    <section class="pane" data-pane="requests" id="pane-requests">
+      <header><h2>Guest requests &amp; issues</h2><span class="cnt" id="req-cnt"></span><div class="right"><button class="btn sm ghost" id="addreq">+ Add</button></div></header>
+      <div id="requests"></div>
+    </section>
+    <section class="pane" data-pane="feed" id="pane-feed">
+      <header><h2>Team feed</h2><span class="cnt" id="feed-cnt"></span></header>
+      <div class="ffilter" id="ffilter">
+        <button data-ch="all" aria-pressed="true">All</button>
+        <button data-ch="team" aria-pressed="false">Airbnb team</button>
+        <button data-ch="cleaning" aria-pressed="false">Cleaning team</button>
+      </div>
+      <form class="compose" id="compose"><input id="composetxt" placeholder="Post a note to the team…" aria-label="Post a note"><button class="btn primary" type="submit">Post</button></form>
+      <div id="feed"></div>
+    </section>
+  </div>
+</div>
+
+<div id="overlay"></div>
+<div id="toasts"></div>
+<div class="sr" aria-live="polite" id="live"></div>
+
+<script src="data/seed.js"></script>
+<script>
+/* =========================================================
+   Acelence Ops Board
+   One page, two storage modes:
+   - "live": claude.ai shared database (claude.use("db")) -> every teammate sees the same board.
+   - "local": localStorage on this device only (self-hosted / opened from disk), seeded from data/seed.js.
+   ========================================================= */
+const TZ = "Asia/Kuala_Lumpur";
+const UNIT_MAP = [
+ ["T1-09-01","KLCC view Apt with 2BR 2BA"],["T1-12-09","Modern Studio Space with Relaxing Balcony"],["T1-15-03","1BR Apt w/balcony and KL Tower View"],["T1-20-02","⁂ Iconic KL View ⁂ Dual Key Suite w/ 2 Ensuite BA"],["T1-23a-3a","⁂ Iconic KL View ⁂ - 2BR 2BA Apt @ Bukit Bintang"],["T1-25-03","Dual Key Suite w/ 2 Private BA ⁂ Iconic KL View ⁂"],["T1-27-07","Elevated Living #1 - 2BR Designer Suite w/ Balcony"],["T1-46-05","Panoramic KL Skyline | Corner 2BR 2BA w/ Balcony"],
+ ["T2-11-09","Executive King Suite with balcony & city panorama"],["T2-13a-02","Iconic View 2BR Home | Balcony, Bright & Cozy"],["T2-22-2","Dual Key Suite w/ 2 Ensuite BA ⁂ KLCC View ⁂"],["T2-22-3a","2BR 2BA Balcony w/Stunning KLCC & KL Tower view & Mall"],["T2-23-05","2BR 2BA Apt w/Balcony I King Beds I Shopping Mall"],["T2-23-09","Executive King 2BR 2BA Apt w/Balcony"],["T2-26-01","SkyHigh 2BR/2BA with Stunning KLCC & KL Tower View"],["T2-29-03","Iconic KL View | High Floor Dual Suite w/ balcony"],["T2-30-03","High Floor KLCC View Dual Key 2BR I King Beds"],
+ ["S-08-08","KL Tower View 2BR Suite in Downtown KL"],["S-23-09","Exclusive 1br Suite w/ KL Tower View near Pavilion"],["S-33a-06","Modern 2QB Apt | Bukit Bintang | Robertson"],["S-35-09","Luxe 1BR Suite with Mesmeric KL Skyline View"],["S-36-11","[KL Skyline View] 2BR Robertson Apt-near Pavillion"],
+ ["N-12-03","Elegant 1BR Suite @ Robertson near Pavilion"],["N-18-11","1 BR Nordic Oasis Robertson Apt near Pavilion"],["N-22-11","1+1BR Skyview Suite @ Bukit Bintang"],["N-33-06","High Floor Twin Tower View 1BR Suite"],["N-38-11","High Floor 1BR Apt near Pavilion"],
+ ["SH-09-12","Private Dual-Key Home | King Beds + Ensuites"],["SH-10-05","KL118 View 2BR 2BA | Walk to Mall & MRT"],["SH-12-03","KLCC View 2BR Apt | Shopping Mall | MRT"],["SH-17-06","Iconic KL118 View 2BR 2BA 2"],["SH-19-06","Iconic KL118 View 2BR 2BA"],["SH-19-07","Icon KL118 2BR 2BA | King Beds"],["SH-19-09","Iconic KL118 View | Dual Key 2BR"],["SH-21-02","Iconic KLCC View 2BR | Walk to Mall & MRT"],["SH-21-03","Iconic KLCC View 2BR | 2 min Walk to Mall & MRT"],["SH-21-08","Kl 118 view 2br 2ba | shopping mall | mrt"],
+ ["Eaton 1501","Mesmerising KLCC View - 2BR 2BA Apt with Bathtub"],["Eaton 18-03","Designer 1BR Eaton Suite with KLCC view"],["Eaton 38-09","Modern Elegance - 2BR Gem I KLCC"],
+ ["A-22-03","Iconic Klcc View 2 bedroom I Bathtub I Skypool"],["A-32-3a","Signature 2BR: KLCC View, Bathtub & SkyPool"],["A-52-07","Panoramic Sky View 2BR w/ bathtub and sky pool"]
+];
+const BUILDINGS = {T1:"Tower 1",T2:"Tower 2",S:"S Block",N:"N Block",SH:"SH Block",Eaton:"Eaton",A:"A Block"};
+const UNITS = UNIT_MAP.map(([code,listing])=>({code,listing,bld:code.split(/[- ]/)[0]}));
+const UNIT_SET = new Set(UNITS.map(u=>u.code));
+const ROLES = {manager:"Manager",attendance:"Attendance team",cleaning:"Cleaning team"};
+const ST_LABEL = {idle:"No movement",occupied:"Occupied",checkout:"Check-out 12 PM",toclean:"Needs cleaning",cleaning:"Cleaning now",prep:"Prepare for arrival",ready:"Cleaned · ready",arrived:"Guest in"};
+const KIND = {out:"OUT",in:"IN",clean:"CLN",rq:"REQ",eta:"ETA",issue:"ISS",note:"NOTE"};
+
+const S = {res:{}, req:{}, units:{}, feed:[], mode:"connecting", role:null, db:null};
+const UI = {tab:"today", ch:"all", overlay:null, popupShown:false};
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const nowISO = ()=>new Date().toISOString();
+function klDate(d=new Date()){ return new Intl.DateTimeFormat("en-CA",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit"}).format(d); }
+function klTime(iso){ return new Intl.DateTimeFormat("en-MY",{timeZone:TZ,hour:"numeric",minute:"2-digit",hour12:true}).format(iso?new Date(iso):new Date()).toUpperCase(); }
+function klLong(d=new Date()){ return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(d); }
+const TODAY = klDate();
+const uid = p=>p+"-"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const docId = code=>String(code).replace(/[^A-Za-z0-9_.~:@+-]/g,"_");
+const roleName = ()=>ROLES[S.role]||"Team";
+
+/* ---------- storage ---------- */
+const LS_KEY="acelence-ops-v1";
+const Local = {
+  load(){
+    try{ const raw=localStorage.getItem(LS_KEY); if(raw){ const d=JSON.parse(raw); Object.assign(S,{res:d.res||{},req:d.req||{},units:d.units||{},feed:d.feed||[]}); return; } }catch(e){}
+    const seed=window.OPS_SEED||{reservations:[],requests:[],units:{},feed:[]};
+    S.res={}; seed.reservations.forEach(r=>S.res[r.id]={...r});
+    S.req={}; seed.requests.forEach(r=>S.req[r.id]={...r});
+    S.units={}; Object.entries(seed.units).forEach(([k,v])=>S.units[k]={code:k,date:TODAY,...v});
+    S.feed=(seed.feed||[]).slice();
+    this.save();
+  },
+  save(){ try{ localStorage.setItem(LS_KEY,JSON.stringify({date:TODAY,res:S.res,req:S.req,units:S.units,feed:S.feed.slice(0,300)})); }catch(e){} }
+};
+async function write(coll,id,data,merge){
+  // Apply optimistically to local state, then persist.
+  const key = coll==="res"?"res":coll==="req"?"req":coll==="units"?"units":null;
+  if(coll==="feed"){ S.feed.unshift(data); S.feed.sort((a,b)=>b.ts.localeCompare(a.ts)); }
+  else if(key){ S[key][id] = merge ? {...(S[key][id]||{}), ...data} : data; }
+  render();
+  if(S.mode==="live" && S.db){
+    try{
+      const name = {res:"reservations",req:"requests",units:"units",feed:"feed"}[coll];
+      const body = coll==="feed"?data:S[key][id];
+      await S.db.doc(name+"/"+docId(id??data.id)).set(body);
+    }catch(e){ toast("Could not sync: "+(e.message||e.code||"error")); console.error(e); }
+  } else Local.save();
+}
+async function remove(coll,id){
+  const key = coll==="res"?"res":coll==="req"?"req":"units";
+  delete S[key][id]; render();
+  if(S.mode==="live"&&S.db){ try{ await S.db.doc({res:"reservations",req:"requests",units:"units"}[coll]+"/"+docId(id)).delete(); }catch(e){ toast("Could not sync"); } }
+  else Local.save();
+}
+function bootLocal(){ S.mode="local"; Local.load(); setSync(); render(); firstPopup(); }
+async function boot(){
+  render();
+  let db=null;
+  try{ if(window.claude&&typeof window.claude.use==="function") db=await window.claude.use("db"); }catch(e){ db=null; }
+  if(!db){ bootLocal(); return; }
+  S.db=db; S.mode="live";
+  const sub=(name,fn)=>db.collection(name).onSnapshot(fn,e=>{ console.error(name,e); if(e.code==="not_granted"||e.code==="revoked"){ if(S.mode==="live"){ bootLocal(); } } });
+  let ready=0; const first=()=>{ if(++ready===4){ setSync(); firstPopup(); } };
+  let f1,f2,f3,f4;
+  sub("reservations",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.id||d.id]=v; } }); S.res=o; render(); if(!f1){f1=1;first();} });
+  sub("requests",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.id||d.id]=v; } }); S.req=o; render(); if(!f2){f2=1;first();} });
+  sub("units",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.code||d.id]=v; } }); S.units=o; render(); if(!f3){f3=1;first();} });
+  db.collection("feed").orderBy("ts","desc").limit(200).onSnapshot(snap=>{ S.feed=snap.docs.filter(d=>d.exists).map(d=>d.data()); render(); if(!f4){f4=1;first();} },e=>{ console.error(e); });
+  setSync();
+}
+function setSync(){
+  const el=$("#sync"); el.classList.remove("live","local");
+  if(S.mode==="live"){ el.classList.add("live"); $("#synct").textContent="Live · shared with team"; }
+  else if(S.mode==="local"){ el.classList.add("local"); $("#synct").textContent="This device only"; el.title="No shared database here. Open the claude.ai link so the whole team sees the same board."; }
+  else $("#synct").textContent="Connecting…";
+}
+
+/* ---------- derived ---------- */
+const todayRes = ()=>Object.values(S.res).filter(r=>r.date===TODAY);
+function resFor(code,type){ return todayRes().filter(r=>r.unit===code&&(!type||r.type===type)); }
+function unitState(code){
+  const u=S.units[code]||{}; const todays=u.date===TODAY;
+  const outs=resFor(code,"out"), ins=resFor(code,"in");
+  let st = u.status==="occupied"?"occupied":"idle";
+  if(todays&&(u.status==="cleaning"||u.status==="ready")) st=u.status;
+  if(outs.length){ if(!outs.every(r=>r.checkedOut)) st="checkout"; else if(!(todays&&(u.status==="cleaning"||u.status==="ready"))) st="toclean"; }
+  if(ins.length){ if(ins.some(r=>r.arrived)) st="arrived"; else if(st==="idle"||st==="occupied") st="prep"; }
+  return st;
+}
+const openReq = ()=>Object.values(S.req).filter(r=>r.status==="new");
+function sortRes(a,b){ return (a.type===b.type?0:a.type==="out"?-1:1) || String(a.eta||"").localeCompare(String(b.eta||"")); }
+
+/* ---------- render ---------- */
+function render(){
+  $("#dateline").textContent = klLong();
+  $("#rolename").textContent = S.role?ROLES[S.role]:"Choose role";
+  renderStats(); renderToday(); renderUnits(); renderRequests(); renderFeed(); renderTabs();
+  if(UI.overlay) renderOverlay();
+}
+function renderStats(){
+  const rs=todayRes(), outs=rs.filter(r=>r.type==="out"), ins=rs.filter(r=>r.type==="in");
+  const outDone=outs.filter(r=>r.checkedOut).length, inDone=ins.filter(r=>r.arrived).length;
+  const need=[...new Set(rs.map(r=>r.unit))].filter(c=>UNIT_SET.has(c));
+  const ready=need.filter(c=>["ready","arrived"].includes(unitState(c))).length;
+  const open=openReq().length;
+  const amt=rs.reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const pct=(a,b)=>b?Math.round(a/b*100):0;
+  $("#stats").innerHTML=`
+    <div class="stat ${outDone===outs.length&&outs.length?'ok':'warn'}"><div class="v">${outDone}<span>/${outs.length}</span></div><div class="k">Checked out</div><div class="bar"><i style="width:${pct(outDone,outs.length)}%"></i></div></div>
+    <div class="stat ${inDone===ins.length&&ins.length?'ok':''}"><div class="v">${inDone}<span>/${ins.length}</span></div><div class="k">Guests arrived</div><div class="bar"><i style="width:${pct(inDone,ins.length)}%"></i></div></div>
+    <div class="stat ${ready===need.length&&need.length?'ok':'warn'}"><div class="v">${ready}<span>/${need.length}</span></div><div class="k">Units cleaned &amp; ready</div><div class="bar"><i style="width:${pct(ready,need.length)}%"></i></div></div>
+    <div class="stat ${open?'bad':''}"><div class="v">${open}</div><div class="k">Requests need action</div></div>
+    <div class="stat"><div class="v">${amt?'RM '+amt.toLocaleString('en-MY'):'—'}</div><div class="k">${amt?"Today's bookings":"Booking amounts not entered"}</div></div>`;
+  $("#belln").textContent=open; $("#bell").style.display=open?"":"none";
+}
+function tagsFor(r){
+  const t=[];
+  if(!r.unitConfirmed||r.unit==="UNMAPPED") t.push(`<span class="tag bad">Unit unconfirmed</span>`);
+  (r.flags||[]).forEach(f=>{ if(f==="early")t.push(`<span class="tag warn">Early check-in</span>`); if(f==="late")t.push(`<span class="tag info">Late arrival</span>`); if(f==="tripchange")t.push(`<span class="tag warn">Trip change pending</span>`); if(f==="infant")t.push(`<span class="tag">Infant · cot</span>`); });
+  const st=unitState(r.unit); if(UNIT_SET.has(r.unit)&&(st==="ready"||st==="cleaning"||st==="toclean")) t.push(`<span class="tag ${st==='ready'?'ok':st==='cleaning'?'clean':'bad'}">${ST_LABEL[st]}</span>`);
+  const nreq=Object.values(S.req).filter(q=>q.resId===r.id&&q.status==="new").length; if(nreq) t.push(`<span class="tag bad">${nreq} request${nreq>1?'s':''}</span>`);
+  return t.join("");
+}
+function resCard(r){
+  const done=r.type==="out"?!!r.checkedOut:!!r.arrived;
+  const time=r.type==="out"?(r.checkedOut?klTime(r.checkedOut):(r.eta||"12:00 PM")):(r.arrived?klTime(r.arrived):(r.eta||"4:00 PM"));
+  const sub=r.type==="out"?(r.checkedOut?"checked out":"due out"):(r.arrived?"arrived":"expected");
+  const acts = r.type==="out"
+    ? (r.checkedOut?`<button class="btn sm ghost" data-act="undo-out" data-id="${r.id}">Undo</button>`:`<button class="btn ok" data-act="out" data-id="${r.id}">Checked out</button>`)
+    : (r.arrived?`<button class="btn sm ghost" data-act="undo-in" data-id="${r.id}">Undo</button>`:`<button class="btn info" data-act="in" data-id="${r.id}">Guest arrived</button><button class="btn sm" data-act="eta" data-id="${r.id}">Update arrival</button>`);
+  return `<article class="res ${r.type} ${done?'done':''}" data-open="res" data-id="${r.id}">
+    <div class="time">${esc(time)}<small>${sub}</small></div>
+    <div class="main"><div><span class="unit ${UNIT_SET.has(r.unit)?'':'q'}">${esc(r.unit==="UNMAPPED"?"Unit ?":r.unit)}</span> &nbsp;<span class="guest">${esc(r.guest)}</span></div>
+      <div class="meta">${esc(r.pax||"")}${r.pax?" · ":""}${esc(r.stay||"")}${r.etaNote?" · "+esc(r.etaNote):""}</div>
+      <div class="tags">${tagsFor(r)}</div></div>
+    <div class="acts">${acts}</div></article>`;
+}
+function renderToday(){
+  const rs=todayRes().sort(sortRes); const outs=rs.filter(r=>r.type==="out"), ins=rs.filter(r=>r.type==="in");
+  $("#today-cnt").textContent=`${outs.length} out · ${ins.length} in`;
+  const g=(label,list,empty)=>`<div class="grp"><div class="label">${label}</div><div class="rlist">${list.length?list.map(resCard).join(""):`<div class="empty">${empty}</div>`}</div></div>`;
+  const turn=outs.filter(o=>ins.some(i=>i.unit===o.unit)).map(o=>o.unit);
+  $("#today").innerHTML = g("Check-outs · by 12:00 PM",outs,"No check-outs today") + g("Check-ins · from 4:00 PM",ins,"No arrivals today")
+    + (turn.length?`<div class="muted small">Same-day turnover: ${turn.map(esc).join(", ")}</div>`:`<div class="muted small">No same-day turnovers today.</div>`);
+  if(!rs.length) $("#today").innerHTML=`<div class="empty">Nothing scheduled for ${klLong()}.<br>Use ⋯ → Import schedule to paste today's file.</div>`;
+}
+function renderUnits(){
+  const groups={}; UNITS.forEach(u=>(groups[u.bld]=groups[u.bld]||[]).push(u));
+  let html=""; let active=0;
+  for(const [b,list] of Object.entries(groups)){
+    html+=`<div class="bld"><div class="label"><b>${esc(BUILDINGS[b]||b)}</b><span>${list.length} units</span></div><div class="ugrid">`+list.map(u=>{
+      const st=unitState(u.code); if(st!=="idle"&&st!=="occupied") active++;
+      const rs=resFor(u.code); const who=rs.length?rs.map(r=>(r.type==="out"?"↑ ":"↓ ")+r.guest.split(" ")[0]).join(" · "):(S.units[u.code]?.note||"");
+      const issue=Object.values(S.req).some(q=>q.unit===u.code&&q.status==="new");
+      return `<button class="ubox" data-st="${st}" data-open="unit" data-id="${esc(u.code)}" title="${esc(u.listing)}">${issue?'<span class="flag" title="Open request"></span>':''}<span class="code">${esc(u.code)}</span><span class="st">${ST_LABEL[st]}</span><span class="who">${esc(who)}</span></button>`;
+    }).join("")+`</div></div>`;
+  }
+  $("#units").innerHTML=html; $("#units-cnt").textContent=`${active} active of ${UNITS.length}`;
+}
+function reqCard(q){
+  const isIssue=q.kind==="issue";
+  const acts = q.status==="new"
+    ? `<button class="btn clean sm" data-act="send" data-to="cleaning" data-id="${q.id}">→ Cleaning team</button><button class="btn primary sm" data-act="send" data-to="team" data-id="${q.id}">→ Management</button><button class="btn sm ghost" data-act="done" data-id="${q.id}">Done</button>`
+    : q.status==="sent" ? `<button class="btn ok sm" data-act="done" data-id="${q.id}">Mark done</button><button class="btn sm ghost" data-act="reopen" data-id="${q.id}">Reopen</button>`
+    : `<button class="btn sm ghost" data-act="reopen" data-id="${q.id}">Reopen</button><button class="btn sm ghost" data-act="delreq" data-id="${q.id}">Remove</button>`;
+  const state = q.status==="sent"?`Sent to ${q.assignedTo==="cleaning"?"Cleaning team":"Management"} · ${klTime(q.sentAt)}${q.sentBy?" by "+esc(q.sentBy):""}`:q.status==="done"?`Done · ${klTime(q.doneAt)}`:`Received ${q.receivedAt?klTime(q.receivedAt):""} · ${q.priority==="high"?"High priority":"Normal"}`;
+  return `<article class="rq ${q.status} ${isIssue?'issue':''}"><div class="head"><span class="tag ${isIssue?'clean':'bad'}">${isIssue?"Issue":"Request"}</span><span class="unit">${esc(q.unit||"—")}</span><span class="guest">${esc(q.guest||"")}</span><span class="src">${esc(q.source||"")}</span></div>
+    <div class="txt">${esc(q.text)}</div><div class="acts">${acts}</div><div class="state">${state}</div></article>`;
+}
+function renderRequests(){
+  const list=Object.values(S.req).sort((a,b)=>(a.status==="new"?0:a.status==="sent"?1:2)-(b.status==="new"?0:b.status==="sent"?1:2)||String(b.receivedAt||"").localeCompare(String(a.receivedAt||"")));
+  $("#req-cnt").textContent=`${openReq().length} open`;
+  $("#requests").innerHTML=list.length?list.map(reqCard).join(""):`<div class="empty">No requests. New guest requirements and cleaning issues appear here.</div>`;
+}
+function waText(m){ return `https://wa.me/?text=${encodeURIComponent(`[${m.unit||"Ops"}] ${m.text} — ${m.by}, ${klTime(m.ts)}`)}`; }
+function renderFeed(){
+  const list=S.feed.filter(m=>UI.ch==="all"||m.channel==="all"||m.channel===UI.ch);
+  $("#feed-cnt").textContent=`${list.length} today`;
+  $("#feed").innerHTML=list.length?list.map(m=>`<div class="msg"><div class="k ${esc(m.kind)}">${KIND[m.kind]||"·"}</div><div class="b"><div class="t">${esc(m.text)}</div><div class="m"><span>${klTime(m.ts)}</span><span class="ch">${m.channel==="cleaning"?"Cleaning team":m.channel==="team"?"Airbnb team":"Both teams"}</span><span>${esc(m.by)}</span><a href="${waText(m)}" target="_blank" rel="noopener">WhatsApp</a><button data-act="copy" data-text="${esc(m.text)}">Copy</button></div></div></div>`).join(""):`<div class="empty">Every check-out, arrival, cleaning update and request posts here automatically.</div>`;
+  document.querySelectorAll("#ffilter button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.ch===UI.ch));
+}
+function renderTabs(){
+  const rs=todayRes(); $("#tn-today").textContent=rs.length; $("#tn-units").textContent=UNITS.filter(u=>!["idle","occupied"].includes(unitState(u.code))).length;
+  const o=openReq().length; const rq=$("#tn-requests"); rq.textContent=o; rq.classList.toggle("hot",o>0); $("#tn-feed").textContent=S.feed.length;
+  document.querySelectorAll("#tabs [role=tab]").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===UI.tab));
+  document.querySelectorAll(".pane[data-pane]").forEach(p=>p.classList.toggle("on",p.dataset.pane===UI.tab));
+}
+
+/* ---------- actions ---------- */
+function post(kind,channel,text,unit){ return write("feed",null,{id:uid("m"),ts:nowISO(),kind,channel,text,unit:unit||"",by:roleName(),date:TODAY}); }
+async function markOut(id){ const r=S.res[id]; if(!r)return; await write("res",id,{checkedOut:nowISO()},true); await post("out","all",`CHECKED OUT · ${r.unit} · ${r.guest} at ${klTime()}. Unit is free for cleaning.`,r.unit); toast(`${r.unit} checked out · cleaning team notified`); }
+async function undoOut(id){ const r=S.res[id]; await write("res",id,{checkedOut:null},true); await post("out","all",`Correction: ${r.unit} · ${r.guest} has NOT checked out yet.`,r.unit); }
+async function markIn(id){ const r=S.res[id]; if(!r)return; await write("res",id,{arrived:nowISO()},true); await post("in","team",`ARRIVED · ${r.unit} · ${r.guest} (${r.pax||""}) at ${klTime()}. Attendance team please attend.`,r.unit); toast(`${r.guest.split(" ")[0]} arrived · Airbnb team notified`); }
+async function undoIn(id){ const r=S.res[id]; await write("res",id,{arrived:null},true); await post("in","team",`Correction: ${r.unit} · ${r.guest} has not arrived yet.`,r.unit); }
+async function setEta(id,eta,note){ const r=S.res[id]; const was=r.eta; await write("res",id,{eta,etaNote:note},true); await post("eta","team",`ARRIVAL UPDATE · ${r.unit} · ${r.guest} now expected ${eta}${was&&was!==eta?" (was "+was+")":""}.${note?" "+note:""}`,r.unit); toast("Arrival time updated · team notified"); }
+async function unitStatus(code,status){
+  const u=S.units[code]||{code}; await write("units",code,{...u,code,status,date:TODAY,updatedAt:nowISO(),updatedBy:roleName()});
+  const ins=resFor(code,"in"); const nxt=ins.length?` Next guest: ${ins[0].guest} ${ins[0].eta?"at "+ins[0].eta:""}.`:"";
+  if(status==="cleaning") await post("clean","all",`CLEANING STARTED · ${code} at ${klTime()} by ${roleName()}.`,code);
+  if(status==="ready"){ await post("clean","all",`CLEANING DONE · ${code} at ${klTime()} by ${roleName()}. Unit is ready.${nxt}`,code); toast(`${code} ready · Airbnb team notified`); }
+  if(status==="toclean") await post("clean","cleaning",`${code} needs cleaning again (reopened by ${roleName()}).`,code);
+}
+async function sendReq(id,to){ const q=S.req[id]; if(!q)return; await write("req",id,{status:"sent",assignedTo:to,sentAt:nowISO(),sentBy:roleName()},true);
+  await post(q.kind==="issue"?"issue":"rq",to,`${q.kind==="issue"?"ISSUE":"REQUEST"} · ${q.unit||"—"} · ${q.guest?q.guest+": ":""}${q.text} — please action.`,q.unit); toast(`Sent to ${to==="cleaning"?"Cleaning team":"Management"}`); }
+async function doneReq(id){ const q=S.req[id]; await write("req",id,{status:"done",doneAt:nowISO(),doneBy:roleName()},true); if(q.status==="sent") await post(q.kind==="issue"?"issue":"rq",q.assignedTo||"team",`DONE · ${q.unit||"—"} · ${q.text.slice(0,80)}${q.text.length>80?"…":""} — by ${roleName()}.`,q.unit); }
+async function addReq(o){ const id=uid("rq"); await write("req",id,{id,status:"new",receivedAt:nowISO(),priority:"normal",...o}); toast(o.kind==="issue"?"Issue logged":"Request added"); return id; }
+
+/* ---------- overlays ---------- */
+function openSheet(o){ UI.overlay=o; renderOverlay(); }
+function closeOverlay(){ UI.overlay=null; $("#overlay").innerHTML=""; }
+function sheet(inner){ $("#overlay").innerHTML=`<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" style="position:relative">${inner}<button class="close" data-close aria-label="Close">×</button></div></div>`; }
+function renderOverlay(){
+  const o=UI.overlay; if(!o)return;
+  if(o.type==="role") return sheet(`<h2>Who is using this device?</h2><div class="sub">Your updates in the team feed are signed with this name.</div><div class="rolepick">
+    <button data-role="manager"><b>Manager</b><span>Full picture. Send requests to either team.</span></button>
+    <button data-role="attendance"><b>Attendance team</b><span>Arrivals, check-outs, guest arrival times.</span></button>
+    <button data-role="cleaning"><b>Cleaning team</b><span>Mark units cleaned, report issues found during cleaning.</span></button></div>`);
+  if(o.type==="popup"){ const list=openReq(); return sheet(`<h2>${list.length} item${list.length>1?"s":""} need${list.length>1?"":"s"} action</h2><div class="sub">Guest requests from Airbnb messages and issues raised by the cleaning team. Send each one to the right team, or mark it done.</div>
+    ${list.map(q=>`<div class="popup"><div class="h"><span class="tag ${q.kind==='issue'?'clean':'bad'}">${q.kind==="issue"?"Issue":"Request"}</span><span class="unit">${esc(q.unit||"—")}</span><span>${esc(q.guest||"")}</span></div><div style="margin:6px 0 8px">${esc(q.text)}</div>
+      <div class="row"><button class="btn clean sm" data-act="send" data-to="cleaning" data-id="${q.id}">→ Cleaning team</button><button class="btn primary sm" data-act="send" data-to="team" data-id="${q.id}">→ Management</button><button class="btn sm ghost" data-act="done" data-id="${q.id}">Done</button></div></div>`).join("")}
+    <div class="row" style="margin-top:14px"><button class="btn" data-close>Later</button></div>`); }
+  if(o.type==="res"){ const r=S.res[o.id]; if(!r)return closeOverlay(); const st=unitState(r.unit); const reqs=Object.values(S.req).filter(q=>q.resId===r.id||q.unit===r.unit);
+    return sheet(`<div class="label">${r.type==="out"?"Check-out":"Check-in"} · ${esc(r.stay||"")}</div><h2>${esc(r.guest)}</h2><div class="sub"><span class="mono">${esc(r.unit==="UNMAPPED"?"Unit not mapped":r.unit)}</span> · ${esc(r.listing||"")}</div>
+      <dl class="kv"><dt>Guests</dt><dd>${esc(r.pax||"—")}</dd><dt>${r.type==="out"?"Due out":"Expected"}</dt><dd>${esc(r.eta||"—")}${r.etaNote?" · "+esc(r.etaNote):""}</dd><dt>Confirmation</dt><dd class="mono">${esc(r.id)}</dd><dt>Unit status</dt><dd>${ST_LABEL[st]}</dd><dt>Booking</dt><dd>${r.amount?"RM "+Number(r.amount).toLocaleString("en-MY"):"—"} <button class="btn sm ghost" data-act="amount" data-id="${r.id}">Edit</button></dd>${r.note?`<dt>Notes</dt><dd>${esc(r.note)}</dd>`:""}</dl>
+      <div class="sec row">${r.type==="out"?(r.checkedOut?`<span class="tag ok">Checked out ${klTime(r.checkedOut)}</span><button class="btn sm ghost" data-act="undo-out" data-id="${r.id}">Undo</button>`:`<button class="btn ok" data-act="out" data-id="${r.id}">Checked out</button>`):(r.arrived?`<span class="tag ok">Arrived ${klTime(r.arrived)}</span><button class="btn sm ghost" data-act="undo-in" data-id="${r.id}">Undo</button>`:`<button class="btn info" data-act="in" data-id="${r.id}">Guest arrived</button><button class="btn" data-act="eta" data-id="${r.id}">Update arrival time</button>`)}
+      ${UNIT_SET.has(r.unit)?`<button class="btn" data-act="openunit" data-id="${esc(r.unit)}">Open unit</button>`:""}<button class="btn" data-act="assignunit" data-id="${r.id}">${UNIT_SET.has(r.unit)&&r.unitConfirmed?"Change unit":"Assign unit"}</button><button class="btn" data-act="newreq" data-res="${r.id}">+ Request</button><button class="btn sm ghost" data-act="delres" data-id="${r.id}">Remove</button></div>
+      ${reqs.length?`<div class="sec"><div class="label" style="margin-bottom:8px">Requests for this stay</div>${reqs.map(reqCard).join("")}</div>`:""}`); }
+  if(o.type==="unit"){ const code=o.id; const u=UNITS.find(x=>x.code===code); const st=unitState(code); const rs=resFor(code); const ud=S.units[code]||{}; const reqs=Object.values(S.req).filter(q=>q.unit===code&&q.status!=="done");
+    return sheet(`<div class="label">${esc(BUILDINGS[u.bld]||u.bld)}</div><h2 class="mono">${esc(code)}</h2><div class="sub">${esc(u.listing)}</div>
+      <div class="row"><span class="tag ${st==='ready'||st==='arrived'?'ok':st==='toclean'?'bad':st==='cleaning'?'clean':st==='idle'?'':'warn'}" style="font-size:13px;padding:5px 10px">${ST_LABEL[st]}</span>${ud.updatedAt?`<span class="muted small">updated ${klTime(ud.updatedAt)} by ${esc(ud.updatedBy||"")}</span>`:""}</div>
+      ${rs.length?`<div class="sec"><div class="label" style="margin-bottom:8px">Today</div><div class="rlist">${rs.map(resCard).join("")}</div></div>`:""}
+      <div class="sec"><div class="label" style="margin-bottom:8px">Cleaning</div><div class="row">
+        ${st==="cleaning"?"":`<button class="btn clean" data-act="ust" data-st="cleaning" data-id="${esc(code)}">Start cleaning</button>`}
+        ${st==="ready"||st==="arrived"?"":`<button class="btn ok" data-act="ust" data-st="ready" data-id="${esc(code)}">Cleaning done · unit ready</button>`}
+        ${st==="ready"?`<button class="btn" data-act="ust" data-st="toclean" data-id="${esc(code)}">Needs cleaning again</button>`:""}
+        <button class="btn bad" data-act="newissue" data-unit="${esc(code)}">Report issue</button>
+        ${st==="idle"||st==="occupied"?`<button class="btn sm ghost" data-act="ust" data-st="${st==="occupied"?"idle":"occupied"}" data-id="${esc(code)}">${st==="occupied"?"Mark vacant":"Mark occupied"}</button>`:""}
+      </div></div>
+      ${reqs.length?`<div class="sec"><div class="label" style="margin-bottom:8px">Open for this unit</div>${reqs.map(reqCard).join("")}</div>`:""}`); }
+  if(o.type==="eta"){ const r=S.res[o.id]; return sheet(`<h2>Update arrival</h2><div class="sub">${esc(r.guest)} · <span class="mono">${esc(r.unit)}</span> · currently ${esc(r.eta||"—")}</div>
+      <form id="etaform"><div class="field"><label for="eta-t">New arrival time</label><input id="eta-t" value="${esc(r.eta||"")}" placeholder="e.g. 3:15 PM or 1:30 AM (15 Sep)" required></div>
+      <div class="field"><label for="eta-n">Note for the team (optional)</label><input id="eta-n" value="${esc(r.etaNote||"")}" placeholder="Taxi plate ABC 1234, flight landed, etc."></div>
+      <div class="row" style="margin-top:12px"><button class="btn primary" type="submit">Save &amp; notify Airbnb team</button><button class="btn" type="button" data-close>Cancel</button></div></form>`); }
+  if(o.type==="amount"){ const r=S.res[o.id]; return sheet(`<h2>Booking amount</h2><div class="sub">${esc(r.guest)} · <span class="mono">${esc(r.unit)}</span></div><form id="amtform"><div class="field"><label for="amt">Amount (RM)</label><input id="amt" type="number" min="0" step="0.01" value="${r.amount??""}" inputmode="decimal"></div><div class="row" style="margin-top:12px"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" data-close>Cancel</button></div></form>`); }
+  if(o.type==="assign"){ const r=S.res[o.id]; return sheet(`<h2>Assign unit</h2><div class="sub">${esc(r.guest)} · ${esc(r.listing||"")}</div><form id="assignform"><div class="field"><label for="asg">Unit</label><select id="asg">${UNITS.map(u=>`<option value="${esc(u.code)}" ${u.code===r.unit?"selected":""}>${esc(u.code)} — ${esc(u.listing)}</option>`).join("")}</select></div><div class="row" style="margin-top:12px"><button class="btn primary" type="submit">Confirm unit</button><button class="btn" type="button" data-close>Cancel</button></div></form>`); }
+  if(o.type==="newreq"){ const r=o.res?S.res[o.res]:null; const isIssue=o.kind==="issue"; return sheet(`<h2>${isIssue?"Report an issue":"Add guest request"}</h2><div class="sub">${isIssue?"Found something during cleaning? Log it here and send it to management.":"Paste the guest's message from Airbnb / Hotmail, or type the requirement."}</div>
+      <form id="reqform"><div class="field"><label for="rq-unit">Unit</label><select id="rq-unit"><option value="">—</option>${UNITS.map(u=>`<option value="${esc(u.code)}" ${(o.unit||r?.unit)===u.code?"selected":""}>${esc(u.code)}</option>`).join("")}</select></div>
+      ${isIssue?"":`<div class="field"><label for="rq-guest">Guest</label><input id="rq-guest" value="${esc(r?.guest||"")}"></div>`}
+      <div class="field"><label for="rq-text">${isIssue?"What's wrong?":"Request"}</label><textarea id="rq-text" required placeholder="${isIssue?"e.g. Ants in the kitchen near the bin. Aircon remote missing.":"e.g. Guest asks for a baby cot and late check-in at 1:30 AM."}"></textarea></div>
+      <div class="field"><label for="rq-src">Source</label><select id="rq-src">${(isIssue?["Cleaning team","Airbnb cleaning chat","Manual"]:["Airbnb message","Hotmail","WhatsApp","Manual"]).map(s=>`<option>${s}</option>`).join("")}</select></div>
+      <div class="field"><label><input type="checkbox" id="rq-high" style="width:auto"> High priority</label></div>
+      <div class="row" style="margin-top:12px"><button class="btn primary" type="submit">Add to action list</button>${isIssue?`<button class="btn clean" type="submit" data-sendto="team">Add &amp; send to management</button>`:""}<button class="btn" type="button" data-close>Cancel</button></div></form>`); }
+  if(o.type==="settings"){ return sheet(`<h2>Data &amp; import</h2><div class="sub">Mode: <b>${S.mode==="live"?"Live, shared with the team":"This device only"}</b> · Today ${TODAY} (Kuala Lumpur)</div>
+      <div class="sec"><div class="label" style="margin-bottom:6px">Import today's schedule</div><div class="small muted" style="margin-bottom:6px">Paste the rows from the daily schedule file (columns: Type, Unit Number, Listing Name, Guest, Date, Note). Existing reservations with the same confirmation code are updated, not duplicated.</div>
+      <form id="impform"><textarea id="imp" placeholder="CHECK-IN,T2-11-09,Executive King Suite…,Ihab (2 adults, 1 child),14/09/26,Stay Sep 14 - Sep 19 | HMH98BY4B9"></textarea><div class="row" style="margin-top:8px"><button class="btn primary" type="submit">Import</button></div></form></div>
+      <div class="sec"><div class="label" style="margin-bottom:6px">Add one reservation</div><form id="oneform"><div class="row"><select id="one-type" style="width:auto"><option value="in">Check-in</option><option value="out">Check-out</option></select><select id="one-unit" style="width:auto">${UNITS.map(u=>`<option>${esc(u.code)}</option>`).join("")}</select></div>
+      <div class="field"><label for="one-guest">Guest</label><input id="one-guest" required placeholder="Name (2 adults)"></div><div class="row"><div class="field" style="flex:1"><label for="one-eta">Time</label><input id="one-eta" placeholder="4:00 PM"></div><div class="field" style="flex:1"><label for="one-code">Confirmation code</label><input id="one-code" placeholder="HMXXXXXXXX"></div></div>
+      <div class="field"><label for="one-note">Note</label><input id="one-note"></div><div class="row" style="margin-top:10px"><button class="btn primary" type="submit">Add</button></div></form></div>
+      <div class="sec"><div class="label" style="margin-bottom:6px">Reset</div><div class="row"><button class="btn bad sm" data-act="clearday">Clear today's check-out / arrival marks</button>${S.mode==="local"?`<button class="btn sm" data-act="reseed">Reload demo data</button>`:""}</div></div>`); }
+}
+function firstPopup(){ if(UI.popupShown)return; UI.popupShown=true; if(!S.role){ openSheet({type:"role"}); return; } if(openReq().length) openSheet({type:"popup"}); }
+
+/* ---------- schedule import ---------- */
+function parseCSV(text){ const rows=[];let row=[],cell="",q=false; for(let i=0;i<text.length;i++){const c=text[i]; if(q){ if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; } else { if(c==='"')q=true; else if(c===","){row.push(cell);cell="";} else if(c==="\n"||c==="\r"){ if(c==="\r"&&text[i+1]==="\n")i++; row.push(cell);rows.push(row);row=[];cell=""; } else cell+=c; } } if(cell.length||row.length){row.push(cell);rows.push(row);} return rows; }
+function importSchedule(text){
+  let n=0; for(const r of parseCSV(text)){ const type=(r[0]||"").trim().toUpperCase(); if(!/^CHECK/.test(type))continue;
+    const t=type.startsWith("CHECKOUT")||type.startsWith("CHECK-OUT")?"out":"in"; let unit=(r[1]||"").trim().replace(/\?$/,""); const unitConfirmed=UNIT_SET.has(unit)&&!/\?$/.test((r[1]||"").trim());
+    const gm=(r[3]||"").match(/^(.*?)\s*\((.*)\)\s*$/); const guest=gm?gm[1].trim():(r[3]||"").trim(); const pax=gm?gm[2]:"";
+    const dm=(r[4]||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); const date=dm?`${dm[3].length===2?"20"+dm[3]:dm[3]}-${dm[2].padStart(2,"0")}-${dm[1].padStart(2,"0")}`:TODAY;
+    const note=r[5]||""; const code=(note.match(/HM[A-Z0-9]{8}/)||[])[0]||uid("r"); const stay=(note.match(/Stay ([^|]+)/)||[])[1]?.trim()||"";
+    const flags=[]; if(/early/i.test(note))flags.push("early"); if(/late|self check-in/i.test(note))flags.push("late"); if(/trip change/i.test(note))flags.push("tripchange"); if(/infant/i.test(pax))flags.push("infant"); if(!unitConfirmed)flags.push("unmapped");
+    const prev=S.res[code]||{}; write("res",code,{...prev,id:code,type:t,unit:unit||"UNMAPPED",unitConfirmed,listing:r[2]||"",guest,pax,date,stay,note:note.replace(/^Stay [^|]+\|\s*HM[A-Z0-9]{8}\s*\|?\s*/,""),flags,eta:prev.eta||(t==="out"?"12:00 PM":"4:00 PM"),amount:prev.amount??null,checkedOut:prev.checkedOut||null,arrived:prev.arrived||null}); n++; }
+  return n;
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click",async e=>{
+  const act=e.target.closest("[data-act]"); const close=e.target.closest("[data-close]"); const opn=e.target.closest("[data-open]"); const role=e.target.closest("[data-role]"); const tab=e.target.closest("[data-tab]"); const ch=e.target.closest("#ffilter [data-ch]");
+  if(close&&(e.target===close||close.classList.contains("close")||close.tagName==="BUTTON")){ closeOverlay(); return; }
+  if(role){ S.role=role.dataset.role; try{localStorage.setItem("acelence-ops-role",S.role);}catch(x){} closeOverlay(); render(); if(openReq().length) openSheet({type:"popup"}); return; }
+  if(tab){ UI.tab=tab.dataset.tab; renderTabs(); return; }
+  if(ch){ UI.ch=ch.dataset.ch; renderFeed(); return; }
+  if(act){ e.stopPropagation(); const id=act.dataset.id; const a=act.dataset.act;
+    if(a==="out")return markOut(id); if(a==="undo-out")return undoOut(id); if(a==="in")return markIn(id); if(a==="undo-in")return undoIn(id);
+    if(a==="eta")return openSheet({type:"eta",id}); if(a==="amount")return openSheet({type:"amount",id}); if(a==="assignunit")return openSheet({type:"assign",id});
+    if(a==="send")return sendReq(id,act.dataset.to).then(()=>{ if(UI.overlay?.type==="popup"&&!openReq().length) closeOverlay(); });
+    if(a==="done")return doneReq(id).then(()=>{ if(UI.overlay?.type==="popup"&&!openReq().length) closeOverlay(); });
+    if(a==="reopen")return write("req",id,{status:"new",assignedTo:null},true);
+    if(a==="delreq")return remove("req",id);
+    if(a==="delres"){ if(confirm("Remove this reservation from the board?")){ await remove("res",id); closeOverlay(); } return; }
+    if(a==="ust")return unitStatus(id,act.dataset.st);
+    if(a==="openunit")return openSheet({type:"unit",id});
+    if(a==="newreq")return openSheet({type:"newreq",res:act.dataset.res,unit:act.dataset.unit});
+    if(a==="newissue")return openSheet({type:"newreq",kind:"issue",unit:act.dataset.unit});
+    if(a==="copy"){ try{ await navigator.clipboard.writeText(act.dataset.text); toast("Copied"); }catch(x){ toast("Copy not available"); } return; }
+    if(a==="clearday"){ if(confirm("Clear all check-out and arrival marks for today?")){ for(const r of todayRes()) await write("res",r.id,{checkedOut:null,arrived:null},true); closeOverlay(); } return; }
+    if(a==="reseed"){ if(confirm("Reload the demo data on this device?")){ localStorage.removeItem(LS_KEY); Local.load(); render(); closeOverlay(); } return; }
+    return; }
+  if(opn){ openSheet({type:opn.dataset.open,id:opn.dataset.id}); return; }
+  if(e.target.closest("#rolechip")) return openSheet({type:"role"});
+  if(e.target.closest("#bell")) return openSheet({type:"popup"});
+  if(e.target.closest("#settings")) return openSheet({type:"settings"});
+  if(e.target.closest("#addreq")) return openSheet({type:"newreq"});
+  if(e.target.closest("#addres")) return openSheet({type:"settings"});
+});
+document.addEventListener("submit",async e=>{
+  const f=e.target; e.preventDefault();
+  if(f.id==="compose"){ const t=$("#composetxt").value.trim(); if(!t)return; $("#composetxt").value=""; await post("note",UI.ch==="all"?"all":UI.ch,t); return; }
+  if(f.id==="etaform"){ await setEta(UI.overlay.id,$("#eta-t").value.trim(),$("#eta-n").value.trim()); closeOverlay(); return; }
+  if(f.id==="amtform"){ const v=$("#amt").value; await write("res",UI.overlay.id,{amount:v===""?null:Number(v)},true); openSheet({type:"res",id:UI.overlay.id}); return; }
+  if(f.id==="assignform"){ const id=UI.overlay.id; const r=S.res[id]; const code=$("#asg").value; await write("res",id,{unit:code,unitConfirmed:true,flags:(r.flags||[]).filter(x=>x!=="unmapped")},true); await post("note","all",`${r.guest} (${r.type==="out"?"check-out":"check-in"}) confirmed as unit ${code}.`,code); openSheet({type:"res",id}); return; }
+  if(f.id==="reqform"){ const sub=e.submitter; const o={unit:$("#rq-unit").value,guest:$("#rq-guest")?.value.trim()||"",text:$("#rq-text").value.trim(),source:$("#rq-src").value,priority:$("#rq-high").checked?"high":"normal",kind:UI.overlay.kind||"request",resId:UI.overlay.res||null,raisedBy:roleName()};
+    if(!o.text)return; const id=await addReq(o); if(sub?.dataset.sendto) await sendReq(id,sub.dataset.sendto); closeOverlay(); return; }
+  if(f.id==="impform"){ const n=importSchedule($("#imp").value); toast(n?`${n} reservation${n>1?"s":""} imported`:"No CHECK-IN / CHECKOUT rows found"); if(n)closeOverlay(); return; }
+  if(f.id==="oneform"){ const code=$("#one-code").value.trim()||uid("r"); const t=$("#one-type").value; const gm=$("#one-guest").value.match(/^(.*?)\s*\((.*)\)\s*$/);
+    await write("res",code,{id:code,type:t,unit:$("#one-unit").value,unitConfirmed:true,guest:gm?gm[1]:$("#one-guest").value.trim(),pax:gm?gm[2]:"",date:TODAY,eta:$("#one-eta").value.trim()||(t==="out"?"12:00 PM":"4:00 PM"),note:$("#one-note").value.trim(),flags:[],amount:null,checkedOut:null,arrived:null}); toast("Reservation added"); closeOverlay(); return; }
+});
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&UI.overlay) closeOverlay(); });
+function toast(t){ const el=document.createElement("div"); el.className="toast"; el.textContent=t; $("#toasts").appendChild(el); $("#live").textContent=t; setTimeout(()=>el.remove(),2600); }
+function tick(){ $("#clock").innerHTML=`${klTime()}<small>Kuala Lumpur · ${S.mode==="live"?"live":"local"}</small>`; }
+setInterval(tick,15000); tick();
+try{ S.role=localStorage.getItem("acelence-ops-role")||null; }catch(e){}
+if(!window.claude && "serviceWorker" in navigator && location.protocol.startsWith("http")){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+boot();
+</script>
+</body>
+</html>
