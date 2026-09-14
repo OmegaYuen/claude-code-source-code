@@ -329,9 +329,10 @@ const ST_LABEL = {idle:"No movement",occupied:"Occupied",checkout:"Check-out 12 
 const KIND = {out:"OUT",in:"IN",clean:"CLN",rq:"REQ",eta:"ETA",issue:"ISS",note:"NOTE"};
 
 const S = {res:{}, req:{}, units:{}, feed:[], mode:"connecting", role:"manager", db:null};
-const CFG = {groups:{team:"Airbnb Team",cleaning:"Cleaning Team"}, autoOpen:true};
+const CFG = {groups:{team:"Airbnb Team",cleaning:"Cleaning Team"}, delivery:"auto"}; /* auto = Mac mini dispatcher sends, tap = open WhatsApp now, batch = collect */
+S.dispatcher=null;
 try{ Object.assign(CFG, JSON.parse(localStorage.getItem("acelence-ops-cfg")||"{}")); }catch(e){}
-function saveCfg(){ try{ localStorage.setItem("acelence-ops-cfg",JSON.stringify(CFG)); }catch(e){} }
+function saveCfg(){ try{ localStorage.setItem("acelence-ops-cfg",JSON.stringify(CFG)); }catch(e){} if(S.mode==="live"&&S.db){ S.db.doc("meta/config").set({groups:CFG.groups,delivery:CFG.delivery,updatedAt:nowISO()}).catch(()=>{}); } }
 const grpName = g=>CFG.groups[g]||g;
 const UI = {tab:"today", ch:"all", overlay:null, popupShown:false};
 const $ = s=>document.querySelector(s);
@@ -392,6 +393,8 @@ async function boot(){
   sub("reservations",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.id||d.id]=v; } }); S.res=o; render(); if(!f1){f1=1;first();} });
   sub("requests",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.id||d.id]=v; } }); S.req=o; render(); if(!f2){f2=1;first();} });
   sub("units",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.code||d.id]=v; } }); S.units=o; render(); if(!f3){f3=1;first();} });
+  db.doc("meta/dispatcher").onSnapshot(d=>{ S.dispatcher=d.exists?d.data():null; renderOutbox(); },()=>{});
+  db.doc("meta/config").get().then(d=>{ if(d.exists){ const c=d.data(); if(c.groups) CFG.groups=c.groups; if(c.delivery) CFG.delivery=c.delivery; render(); } }).catch(()=>{});
   db.collection("feed").orderBy("ts","desc").limit(200).onSnapshot(snap=>{ S.feed=snap.docs.filter(d=>d.exists).map(d=>d.data()); render(); if(!f4){f4=1;first();} },e=>{ console.error(e); });
   setSync();
 }
@@ -499,8 +502,18 @@ function renderRequests(){
   $("#req-cnt").textContent=`${openReq().length} open`;
   $("#requests").innerHTML=list.length?list.map(reqCard).join(""):`<div class="empty">No requests. New guest requirements and cleaning issues appear here.</div>`;
 }
+function dispatcherState(){
+  if(CFG.delivery!=="auto") return null;
+  const d=S.dispatcher; if(!d||!d.lastSeen) return {ok:false,label:"Mac mini sender not running"};
+  const age=(Date.now()-new Date(d.lastSeen).getTime())/60000;
+  if(age>6) return {ok:false,label:`Mac mini sender last seen ${Math.round(age)} min ago`};
+  return {ok:true,label:`Mac mini sending · checked ${age<1?"just now":Math.round(age)+" min ago"}`};
+}
 function renderOutbox(){
-  $("#outbox").innerHTML=["cleaning","team"].map(g=>{ const n=pendingFor(g).length; return `<button class="chip wa ${n?"":"zero"}" data-act="sendgroup" data-id="${g}" title="Open WhatsApp with the pending updates for ${esc(grpName(g))}"><span class="dot" style="background:#25D366"></span><span>${esc(grpName(g))}</span><span class="n">${n}</span></button>`; }).join("");
+  const ds=dispatcherState(); const pend=S.feed.filter(m=>!m.wa).length;
+  const auto = ds ? `<span class="chip ${ds.ok?"live":"local"}" title="${ds.ok?"A Claude session on the Mac mini sends each queued update into WhatsApp.":"Start the sender on the Mac mini (see README), or switch delivery to tap mode under ⋯"}"><span class="dot"></span><span>${esc(ds.label)}${pend?" · "+pend+" queued":""}</span></span>` : "";
+  const showTap = !ds || !ds.ok || CFG.delivery==="batch";
+  $("#outbox").innerHTML=auto+(showTap?["cleaning","team"].map(g=>{ const n=pendingFor(g).length; return `<button class="chip wa ${n?"":"zero"}" data-act="sendgroup" data-id="${g}" title="Open WhatsApp with the pending updates for ${esc(grpName(g))}"><span class="dot" style="background:#25D366"></span><span>${esc(grpName(g))}</span><span class="n">${n}</span></button>`; }).join(""):"");
   $("#fl-team").textContent=grpName("team"); $("#fl-cleaning").textContent=grpName("cleaning");
   const cg=$("#composegrp"); if(cg){ cg.options[0].text=grpName("team"); cg.options[1].text=grpName("cleaning"); }
 }
@@ -508,8 +521,8 @@ function renderFeed(){
   renderOutbox();
   const list=S.feed.filter(m=>UI.ch==="all"||m.channel===UI.ch);
   const pend=S.feed.filter(m=>!m.wa).length;
-  $("#feed-cnt").textContent=`${list.length} today${pend?" · "+pend+" not yet on WhatsApp":""}`;
-  $("#feed").innerHTML=list.length?list.map(m=>`<div class="msg ${m.wa?"":"pending"}"><div class="k ${esc(m.kind)}">${KIND[m.kind]||"·"}</div><div class="b"><div class="t"><b>${esc(m.title||"")}</b>${esc(m.body||m.text||"")}</div><div class="m"><span>${klTime(m.ts)}</span><span class="ch">${esc(grpName(m.channel))}</span>${m.wa?`<span>on WhatsApp ${klTime(m.wa)}</span>`:`<span style="color:var(--warn);font-weight:600">not sent</span>`}<a href="${waUrl(waFormat(m))}" target="_blank" rel="noopener" data-act="waone" data-id="${m.id}">${m.wa?"Send again":"Send to WhatsApp"}</a><button data-act="copy" data-text="${esc(waFormat(m))}">Copy</button></div></div></div>`).join(""):`<div class="empty">Every check-out, arrival, cleaning update and request is composed here and handed to WhatsApp.</div>`;
+  $("#feed-cnt").textContent=`${list.length} today${pend?" · "+pend+(CFG.delivery==="auto"?" queued":" not yet on WhatsApp"):""}`;
+  $("#feed").innerHTML=list.length?list.map(m=>`<div class="msg ${m.wa?"":"pending"}"><div class="k ${esc(m.kind)}">${KIND[m.kind]||"·"}</div><div class="b"><div class="t"><b>${esc(m.title||"")}</b>${esc(m.body||m.text||"")}</div><div class="m"><span>${klTime(m.ts)}</span><span class="ch">${esc(grpName(m.channel))}</span>${m.wa?(m.via==="none"?`<span>log only</span>`:`<span>sent ${klTime(m.wa)}${m.via==="dispatcher"?" by Mac mini":""}</span>`):(CFG.delivery==="auto"?`<span style="color:var(--info);font-weight:600">queued for Mac mini</span>`:`<span style="color:var(--warn);font-weight:600">not sent</span>`)}<a href="${waUrl(waFormat(m))}" target="_blank" rel="noopener" data-act="waone" data-id="${m.id}">${m.wa?"Send again":"Send to WhatsApp"}</a><button data-act="copy" data-text="${esc(waFormat(m))}">Copy</button></div></div></div>`).join(""):`<div class="empty">Every check-out, arrival, cleaning update and request is composed here and handed to WhatsApp.</div>`;
   document.querySelectorAll("#ffilter button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.ch===UI.ch));
 }
 function renderTabs(){
@@ -528,11 +541,12 @@ function waUrl(text){ return (IS_IOS?"whatsapp://send?text=":"https://wa.me/?tex
 function waOpen(text){ const a=document.createElement("a"); a.href=waUrl(text); a.target="_blank"; a.rel="noopener"; document.body.appendChild(a); a.click(); a.remove(); }
 function waFormat(m){ return `*${m.title}*\n${m.body}`; }
 function pendingFor(g){ return S.feed.filter(m=>m.channel===g&&!m.wa).sort((a,b)=>a.ts.localeCompare(b.ts)); }
-async function markSent(ids){ const t=nowISO(); for(const id of ids){ const m=S.feed.find(x=>x.id===id); if(m) await write("feed",id,{...m,wa:t}); } }
-function sendGroup(g){ const list=pendingFor(g); if(!list.length)return; waOpen(list.map(waFormat).join("\n\n")); markSent(list.map(m=>m.id)); toast(`${list.length} update${list.length>1?"s":""} handed to WhatsApp · choose "${grpName(g)}" and send`); }
+async function markSent(ids){ const t=nowISO(); for(const id of ids){ const m=S.feed.find(x=>x.id===id); if(m) await write("feed",id,{...m,wa:t,via:"tap"}); } }
+function sendGroup(g){ const list=pendingFor(g); if(!list.length)return; if(CFG.delivery==="auto") toast("Sending it yourself; the Mac mini will skip these"); waOpen(list.map(waFormat).join("\n\n")); markSent(list.map(m=>m.id)); toast(`${list.length} update${list.length>1?"s":""} handed to WhatsApp · choose "${grpName(g)}" and send`); }
 function post(kind,channel,title,body,unit,notify=true){
   const m={id:uid("m"),ts:nowISO(),kind,channel,title,body,text:title+" — "+body,unit:unit||"",by:roleName(),date:TODAY,wa:null};
-  if(notify&&CFG.autoOpen){ waOpen(waFormat(m)); m.wa=m.ts; }
+  if(!notify){ m.wa=m.ts; m.via="none"; }
+  else if(CFG.delivery==="tap"){ waOpen(waFormat(m)); m.wa=m.ts; m.via="tap"; }
   return write("feed",m.id,m);
 }
 async function markOut(id){ const r=S.res[id]; if(!r)return; const p=post("out","cleaning",`CHECKED OUT · ${r.unit}`,`${r.guest} (${r.pax||""}) left at ${klTime()}. Unit is free for cleaning.${resFor(r.unit,"in").length?" Next guest arrives today "+(resFor(r.unit,"in")[0].eta||"")+".":""}`,r.unit); await write("res",id,{checkedOut:nowISO()},true); await p; toast(`${r.unit} checked out`); }
@@ -601,7 +615,10 @@ function renderOverlay(){
   if(o.type==="settings"){ return sheet(`<h2>Data &amp; import</h2><div class="sub">Mode: <b>${S.mode==="live"?"Live, shared with the team":"This device only"}</b> · Today ${TODAY} (Kuala Lumpur)</div>
       <div class="sec"><div class="label" style="margin-bottom:6px">WhatsApp groups</div><div class="small muted" style="margin-bottom:6px">Names as they appear in your WhatsApp, so the buttons match what you tap in the chat picker.</div>
       <form id="cfgform"><div class="row"><div class="field" style="flex:1"><label for="g-team">Airbnb team group</label><input id="g-team" value="${esc(CFG.groups.team)}"></div><div class="field" style="flex:1"><label for="g-clean">Cleaning team chat</label><input id="g-clean" value="${esc(CFG.groups.cleaning)}"></div></div>
-      <div class="field"><label><input type="checkbox" id="g-auto" style="width:auto" ${CFG.autoOpen?"checked":""}> Open WhatsApp immediately after each update (off = collect updates and send them in one batch from the header buttons)</label></div>
+      <div class="field"><label for="g-del">Delivery</label><select id="g-del">
+        <option value="auto" ${CFG.delivery==="auto"?"selected":""}>Automatic — the Mac mini sender posts each update into WhatsApp (no taps)</option>
+        <option value="tap" ${CFG.delivery==="tap"?"selected":""}>Tap — open WhatsApp with the message after each update</option>
+        <option value="batch" ${CFG.delivery==="batch"?"selected":""}>Batch — collect updates, send per group from the header buttons</option></select></div>
       <div class="row" style="margin-top:8px"><button class="btn primary" type="submit">Save</button></div></form></div>
       <div class="sec"><div class="label" style="margin-bottom:6px">Import today's schedule</div><div class="small muted" style="margin-bottom:6px">Paste the rows from the daily schedule file (columns: Type, Unit Number, Listing Name, Guest, Date, Note). Existing reservations with the same confirmation code are updated, not duplicated.</div>
       <form id="impform"><textarea id="imp" placeholder="CHECK-IN,T2-11-09,Executive King Suite…,Ihab (2 adults, 1 child),14/09/26,Stay Sep 14 - Sep 19 | HMH98BY4B9"></textarea><div class="row" style="margin-top:8px"><button class="btn primary" type="submit">Import</button></div></form></div>
@@ -660,7 +677,7 @@ document.addEventListener("click",async e=>{
 document.addEventListener("submit",async e=>{
   const f=e.target; e.preventDefault();
   if(f.id==="compose"){ const t=$("#composetxt").value.trim(); if(!t)return; $("#composetxt").value=""; await post("note",$("#composegrp").value,`NOTE`,t); return; }
-  if(f.id==="cfgform"){ CFG.groups.team=$("#g-team").value.trim()||"Airbnb Team"; CFG.groups.cleaning=$("#g-clean").value.trim()||"Cleaning Team"; CFG.autoOpen=$("#g-auto").checked; saveCfg(); render(); toast("Saved"); return; }
+  if(f.id==="cfgform"){ CFG.groups.team=$("#g-team").value.trim()||"Airbnb Team"; CFG.groups.cleaning=$("#g-clean").value.trim()||"Cleaning Team"; CFG.delivery=$("#g-del").value; saveCfg(); render(); toast("Saved"); return; }
   if(f.id==="etaform"){ await setEta(UI.overlay.id,$("#eta-t").value.trim(),$("#eta-n").value.trim()); closeOverlay(); return; }
   if(f.id==="amtform"){ const v=$("#amt").value; await write("res",UI.overlay.id,{amount:v===""?null:Number(v)},true); openSheet({type:"res",id:UI.overlay.id}); return; }
   if(f.id==="assignform"){ const id=UI.overlay.id; const r=S.res[id]; const code=$("#asg").value; await write("res",id,{unit:code,unitConfirmed:true,flags:(r.flags||[]).filter(x=>x!=="unmapped")},true); await post("note","team",`UNIT CONFIRMED · ${code}`,`${r.guest} (${r.type==="out"?"check-out":"check-in"}) is unit ${code}.`,code,false); openSheet({type:"res",id}); return; }
