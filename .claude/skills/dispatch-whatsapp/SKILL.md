@@ -16,7 +16,7 @@ Do one pass per invocation. Keep tool calls minimal; most passes have nothing to
 Write the heartbeat first so the board shows the sender is alive:
 
 `Artifact write_db` → `db_op: "set"`, `collection: "meta"`, `doc_id: "dispatcher"`,
-`data: {"lastSeen": "<now, ISO 8601 UTC>", "host": "mac-mini"}`.
+`data: {"lastSeen": "<now, ISO 8601 UTC>", "host": "mac-mini", "model": "<model this pass runs on, if known>"}`.
 
 ## 2. Read the queue
 
@@ -50,6 +50,11 @@ osascript airbnb-ops-dashboard/dispatcher/send_whatsapp.applescript "<group name
 Escape double quotes in the text for the shell. Wait for it to return.
 
 ## 4. Verify before marking sent
+
+Verification mode comes from the board's settings (`meta/config` → `loop.verify`; the
+ops-loop pass tells you which). `always`: do the screenshot check below for every message.
+`on-error`: if the script returned normally, mark the message sent without a screenshot; do
+the check only when `osascript` exits non-zero or prints anything other than "sent to …".
 
 Take a screenshot and look at it:
 

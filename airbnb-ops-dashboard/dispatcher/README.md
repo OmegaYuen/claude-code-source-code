@@ -70,12 +70,28 @@ In this repo on the Mac mini:
 
 ```
 claude
-/loop 2m /ops-loop
+/loop /ops-loop
 ```
 
-Leave that terminal open. Every two minutes the loop sends whatever is queued and reads new
-mail. A quiet pass costs a couple of small tool calls. (`/dispatch-whatsapp` and
-`/read-hotmail` also run on their own.)
+No interval on the command: each pass reads the board's settings and schedules its own next
+wake. Leave that terminal open. (`/dispatch-whatsapp` and `/read-hotmail` also run on their
+own for a one-off pass.)
+
+## Credit use, and the settings that control it
+
+Every pass is a Claude turn, so the settings under ⋯ → **Mac mini automation** on the board
+are the cost controls. The loop reads them each pass; change them on the iPad, no need to
+touch the Mac.
+
+| Setting | Default | Effect |
+|---|---|---|
+| AI model for the loop | Claude Sonnet 5 | The pass runs in a subagent on this model. Sonnet handles sending and email reading well at a fraction of Opus's cost; Haiku is cheaper still and fine for sending, weaker at reading ambiguous emails. |
+| Check every | 5 min | Longer interval = fewer turns. 5 min means a WhatsApp update lands within 5 minutes of your tap. |
+| Active from / until | 08:00 – 23:30 | Outside the window the loop sleeps (one tiny wake per hour). |
+| Screenshot check | Every message | *Only if the script reports a problem* skips the screenshot on normal sends, which is the costliest part of a busy pass. Switch to it once the sender has proven itself on your Mac. |
+
+With the defaults that is roughly 190 passes a day, most of them a settings read, a couple of
+small tool calls and a one-line reply.
 
 To stop: `/loop stop` or close the session. The board falls back to tap delivery
 automatically once the heartbeat goes stale.

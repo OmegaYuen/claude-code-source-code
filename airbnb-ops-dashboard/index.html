@@ -329,10 +329,11 @@ const ST_LABEL = {idle:"No movement",occupied:"Occupied",checkout:"Check-out 12 
 const KIND = {out:"OUT",in:"IN",clean:"CLN",rq:"REQ",eta:"ETA",issue:"ISS",note:"NOTE"};
 
 const S = {res:{}, req:{}, units:{}, feed:[], mode:"connecting", role:"manager", db:null};
-const CFG = {groups:{team:"Airbnb Team",cleaning:"Cleaning Team"}, delivery:"auto"}; /* auto = Mac mini dispatcher sends, tap = open WhatsApp now, batch = collect */
+const CFG = {groups:{team:"Airbnb Team",cleaning:"Cleaning Team"}, delivery:"auto", loop:{model:"sonnet",intervalMin:5,activeFrom:"08:00",activeTo:"23:30",verify:"always"}};
+const MODELS = {sonnet:"Claude Sonnet 5 (recommended)",opus:"Claude Opus 5",haiku:"Claude Haiku 4.5 (cheapest)"}; /* auto = Mac mini dispatcher sends, tap = open WhatsApp now, batch = collect */
 S.dispatcher=null;
 try{ Object.assign(CFG, JSON.parse(localStorage.getItem("acelence-ops-cfg")||"{}")); }catch(e){}
-function saveCfg(){ try{ localStorage.setItem("acelence-ops-cfg",JSON.stringify(CFG)); }catch(e){} if(S.mode==="live"&&S.db){ S.db.doc("meta/config").set({groups:CFG.groups,delivery:CFG.delivery,updatedAt:nowISO()}).catch(()=>{}); } }
+function saveCfg(){ try{ localStorage.setItem("acelence-ops-cfg",JSON.stringify(CFG)); }catch(e){} if(S.mode==="live"&&S.db){ S.db.doc("meta/config").set({groups:CFG.groups,delivery:CFG.delivery,loop:CFG.loop,updatedAt:nowISO()}).catch(()=>{}); } }
 const grpName = g=>CFG.groups[g]||g;
 const UI = {tab:"today", ch:"all", overlay:null, popupShown:false};
 const $ = s=>document.querySelector(s);
@@ -397,7 +398,7 @@ async function boot(){
       if(fresh.length){ if(!UI.overlay) openSheet({type:"popup"}); else toast(`${fresh.length} new request${fresh.length>1?"s":""}`); } } });
   sub("units",snap=>{ const o={}; snap.docs.forEach(d=>{ if(d.exists){ const v=d.data(); o[v.code||d.id]=v; } }); S.units=o; render(); if(!f3){f3=1;first();} });
   db.doc("meta/dispatcher").onSnapshot(d=>{ S.dispatcher=d.exists?d.data():null; renderOutbox(); },()=>{});
-  db.doc("meta/config").get().then(d=>{ if(d.exists){ const c=d.data(); if(c.groups) CFG.groups=c.groups; if(c.delivery) CFG.delivery=c.delivery; render(); } }).catch(()=>{});
+  db.doc("meta/config").get().then(d=>{ if(d.exists){ const c=d.data(); if(c.groups) CFG.groups=c.groups; if(c.delivery) CFG.delivery=c.delivery; if(c.loop) CFG.loop={...CFG.loop,...c.loop}; render(); } }).catch(()=>{});
   db.collection("feed").orderBy("ts","desc").limit(200).onSnapshot(snap=>{ S.feed=snap.docs.filter(d=>d.exists).map(d=>d.data()); render(); if(!f4){f4=1;first();} },e=>{ console.error(e); });
   setSync();
 }
@@ -510,7 +511,7 @@ function dispatcherState(){
   const d=S.dispatcher; if(!d||!d.lastSeen) return {ok:false,label:"Mac mini sender not running"};
   const age=(Date.now()-new Date(d.lastSeen).getTime())/60000;
   if(age>6) return {ok:false,label:`Mac mini sender last seen ${Math.round(age)} min ago`};
-  return {ok:true,label:`Mac mini sending · checked ${age<1?"just now":Math.round(age)+" min ago"}`};
+  return {ok:true,label:`Mac mini sending${d.model?" · "+(MODELS[d.model]||d.model).split(" (")[0]:""} · checked ${age<1?"just now":Math.round(age)+" min ago"}`};
 }
 function renderOutbox(){
   const ds=dispatcherState(); const pend=S.feed.filter(m=>!m.wa).length;
@@ -623,6 +624,13 @@ function renderOverlay(){
         <option value="tap" ${CFG.delivery==="tap"?"selected":""}>Tap — open WhatsApp with the message after each update</option>
         <option value="batch" ${CFG.delivery==="batch"?"selected":""}>Batch — collect updates, send per group from the header buttons</option></select></div>
       <div class="row" style="margin-top:8px"><button class="btn primary" type="submit">Save</button></div></form></div>
+      <div class="sec"><div class="label" style="margin-bottom:6px">Mac mini automation</div><div class="small muted" style="margin-bottom:6px">The Claude loop on the Mac mini reads these each pass. Smaller model, longer interval and shorter hours all cut credit use.</div>
+      <form id="loopform"><div class="row">
+        <div class="field" style="flex:2;min-width:200px"><label for="l-model">AI model for the loop</label><select id="l-model">${Object.entries(MODELS).map(([k,v])=>`<option value="${k}" ${CFG.loop.model===k?"selected":""}>${v}</option>`).join("")}</select></div>
+        <div class="field" style="flex:1;min-width:120px"><label for="l-int">Check every</label><select id="l-int">${[2,3,5,10,15].map(n=>`<option value="${n}" ${CFG.loop.intervalMin==n?"selected":""}>${n} min</option>`).join("")}</select></div></div>
+      <div class="row"><div class="field" style="flex:1"><label for="l-from">Active from</label><input id="l-from" type="time" value="${esc(CFG.loop.activeFrom)}"></div><div class="field" style="flex:1"><label for="l-to">Until</label><input id="l-to" type="time" value="${esc(CFG.loop.activeTo)}"></div>
+        <div class="field" style="flex:2;min-width:200px"><label for="l-ver">Check WhatsApp sends with a screenshot</label><select id="l-ver"><option value="always" ${CFG.loop.verify==="always"?"selected":""}>Every message (safest)</option><option value="on-error" ${CFG.loop.verify==="on-error"?"selected":""}>Only if the script reports a problem (cheaper)</option></select></div></div>
+      <div class="row" style="margin-top:8px"><button class="btn primary" type="submit">Save</button><span class="small muted">Outside active hours the loop sleeps and nothing is sent or read.</span></div></form></div>
       <div class="sec"><div class="label" style="margin-bottom:6px">Import today's schedule</div><div class="small muted" style="margin-bottom:6px">Paste the rows from the daily schedule file (columns: Type, Unit Number, Listing Name, Guest, Date, Note). Existing reservations with the same confirmation code are updated, not duplicated.</div>
       <form id="impform"><textarea id="imp" placeholder="CHECK-IN,T2-11-09,Executive King Suite…,Ihab (2 adults, 1 child),14/09/26,Stay Sep 14 - Sep 19 | HMH98BY4B9"></textarea><div class="row" style="margin-top:8px"><button class="btn primary" type="submit">Import</button></div></form></div>
       <div class="sec"><div class="label" style="margin-bottom:6px">Add one reservation</div><form id="oneform"><div class="row"><select id="one-type" style="width:auto"><option value="in">Check-in</option><option value="out">Check-out</option></select><select id="one-unit" style="width:auto">${UNITS.map(u=>`<option>${esc(u.code)}</option>`).join("")}</select></div>
@@ -680,6 +688,7 @@ document.addEventListener("click",async e=>{
 document.addEventListener("submit",async e=>{
   const f=e.target; e.preventDefault();
   if(f.id==="compose"){ const t=$("#composetxt").value.trim(); if(!t)return; $("#composetxt").value=""; await post("note",$("#composegrp").value,`NOTE`,t); return; }
+  if(f.id==="loopform"){ CFG.loop={model:$("#l-model").value,intervalMin:Number($("#l-int").value),activeFrom:$("#l-from").value||"08:00",activeTo:$("#l-to").value||"23:30",verify:$("#l-ver").value}; saveCfg(); render(); toast(S.mode==="live"?"Saved · Mac mini picks it up on its next pass":"Saved on this device"); return; }
   if(f.id==="cfgform"){ CFG.groups.team=$("#g-team").value.trim()||"Airbnb Team"; CFG.groups.cleaning=$("#g-clean").value.trim()||"Cleaning Team"; CFG.delivery=$("#g-del").value; saveCfg(); render(); toast("Saved"); return; }
   if(f.id==="etaform"){ await setEta(UI.overlay.id,$("#eta-t").value.trim(),$("#eta-n").value.trim()); closeOverlay(); return; }
   if(f.id==="amtform"){ const v=$("#amt").value; await write("res",UI.overlay.id,{amount:v===""?null:Number(v)},true); openSheet({type:"res",id:UI.overlay.id}); return; }
