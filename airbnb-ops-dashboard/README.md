@@ -8,35 +8,42 @@ Works as a web page and as an iPad home-screen app.
 
 ## Open it
 
-**Shared board (recommended):** the published claude.ai link. Everyone who opens it sees the
-same live state. A check-out marked by the attendance team, a "cleaning done" tapped by the
-cleaning team, or a request sent by the manager appears on every open iPad within seconds.
-
-**iPad app:** open the link in Safari → Share → *Add to Home Screen*. It launches full screen
-with the Ops Board icon.
+**Web:** the published claude.ai link. **iPad app:** open that link in Safari → Share →
+*Add to Home Screen*. It launches full screen with the Ops Board icon.
 
 **Self-hosted:** serve this folder from any static host (GitHub Pages works). Without the
 claude.ai database it runs in *This device only* mode, storing state in the browser and
 starting from `data/seed.js`.
 
-## What each team does
+## How the teams get notified
 
-| Role | Taps | What happens |
+The teams do not use the app. Every update is composed as a WhatsApp message and handed to
+WhatsApp with the text pre-filled; you pick the group and tap send. WhatsApp has no way for a
+web page to post into a group by itself, so this one tap is the minimum.
+
+| Tap in the app | WhatsApp message | Goes to |
 |---|---|---|
-| Attendance team | **Checked out** on a departure | Unit box turns red *Needs cleaning*, cleaning team feed gets the message |
-| Attendance team | **Update arrival** on an arrival | New time/note saved, Airbnb team feed posts the change |
-| Attendance team | **Guest arrived** | Unit box turns blue *Guest in*, Airbnb team feed posts "please attend" |
-| Cleaning team | **Start cleaning** / **Cleaning done · unit ready** (tap a unit box) | Box turns purple, then green; Airbnb team is told the unit is ready and who arrives next |
-| Cleaning team | **Report issue** (tap a unit box) | Issue joins the action list; can be sent straight to management |
-| Manager | **→ Cleaning team** / **→ Management** on a request | Request marked *sent*, posted in that team's feed |
-| Anyone | **Post** in the team feed | Free-text note to one or both teams |
+| **Checked out** on a departure | `CHECKED OUT · T2-22-2` + guest, time, "free for cleaning", next arrival | Cleaning team chat |
+| **Update arrival** on an arrival | `ARRIVAL UPDATE · T1-20-02` + new time and note | Airbnb team group |
+| **Guest arrived** | `ARRIVED · T2-11-09` + guest, pax, time, "please attend" | Airbnb team group |
+| **Cleaning done · unit ready** on a unit box | `UNIT READY · T2-22-2` + time and next guest | Airbnb team group |
+| **Needs cleaning again** on a unit box | `CLEANING NEEDED · …` | Cleaning team chat |
+| **WhatsApp → Cleaning Team / Airbnb Team** on a request or issue | `GUEST REQUEST · …` or `ISSUE · …` + the text | The group you chose |
+| **Send** in the updates pane | `NOTE` + your text | The group you chose |
 
-Every feed message has **WhatsApp** (opens WhatsApp with the text pre-filled) and **Copy**
-for anyone still outside the app.
+Two delivery modes (⋯ → WhatsApp groups):
 
-The first time a device opens the board it asks who is using it (Manager, Attendance team,
-Cleaning team). Feed messages are signed with that name. Change it from the role chip in
-the header.
+- **Open WhatsApp immediately after each update** (default). Each tap opens WhatsApp with
+  that message. On iPad it opens the WhatsApp app directly.
+- **Batch.** Updates collect behind the two green header buttons (`Cleaning Team 3`,
+  `Airbnb Team 1`). One tap opens WhatsApp with all pending messages for that group in one
+  text. Messages not yet handed to WhatsApp are highlighted in the updates pane and can be
+  sent individually.
+
+Group names in the buttons are editable so they match the real chat names.
+
+Cleaning team updates still come back through the Airbnb cleaning chat: when they say a unit
+is done, tap the unit box → *Cleaning done · unit ready* and the box turns green.
 
 ## Where the data comes from
 
@@ -44,7 +51,7 @@ the header.
 |---|---|---|
 | Today's check-outs / check-ins | `today schedule/DDMMYY.xlsx` in Google Drive (Type, Unit Number, Listing Name, Guest, Date, Note) | ⋯ → *Import today's schedule*: paste the rows. Same confirmation code updates, never duplicates. |
 | Guest requirements | Guest brief `.docx` / Airbnb messages / Hotmail | *+ Add* on the requests pane, or *+ Request* inside a reservation. Paste the guest's message. |
-| Cleaning issues | Cleaning team, in the app or from the Airbnb cleaning chat | *Report issue* on the unit box |
+| Cleaning issues | Airbnb cleaning chat | *Report issue* on the unit box, then WhatsApp it to management |
 | Unit list | `Listing Unit Map (1).xlsx` | Built into `index.html` (`UNIT_MAP`). Edit there when units are added. |
 | Booking amount | Booking monitoring file (not wired yet) | *Edit* next to Booking in the reservation sheet. The header tile sums whatever is entered. |
 
@@ -53,8 +60,9 @@ rows can be imported today and show up when the date rolls over. Cleaning states
 
 ## Files
 
-- `index.html` – the whole app (CSS + JS inline). Runs in *live* mode when `claude.use("db")`
-  is available, otherwise in *local* mode.
+- `index.html` – the whole app (CSS + JS inline). Runs in *live* mode (state saved to the claude.ai
+  database, so the same board shows on iPad and Mac) when `claude.use("db")` is available,
+  otherwise in *local* mode.
 - `data/seed.js` – local-mode demo data (today's real schedule as of 14 Sep 2026).
 - `manifest.webmanifest`, `sw.js`, `icons/` – PWA install and offline shell for self-hosting.
 - `tools/build-artifact.py` – strips the document skeleton and local seed to produce the

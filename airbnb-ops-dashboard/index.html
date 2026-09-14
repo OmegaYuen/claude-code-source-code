@@ -83,6 +83,10 @@ a{color:var(--accent)}
 .chip.live .dot{background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
 .chip.local .dot{background:var(--warn)}
 .chip.bell{position:relative}
+.chip.wa{border-color:#25D366;background:var(--surface)} .chip.wa .n{background:#25D366;color:#062e14;border-radius:999px;font-size:11px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center}
+.chip.wa.zero{opacity:.55}
+.msg.pending{background:var(--warn-soft);margin:0 -6px;padding-inline:6px;border-radius:8px}
+.msg .t b{display:block}
 .chip.bell .n{background:var(--bad);color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center}
 
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding-block:6px 10px}
@@ -245,6 +249,7 @@ a{color:var(--accent)}
     <div class="spacer"></div>
     <div class="chips">
       <button class="chip bell" id="bell" title="Open requests"><span>Requests</span><span class="n" id="belln">0</span></button>
+      <span id="outbox" style="display:contents"></span>
       <button class="chip" id="rolechip" title="Change who is using this device"><span class="dot"></span><span id="rolename">Choose role</span></button>
       <span class="chip" id="sync"><span class="dot"></span><span id="synct">Connecting…</span></span>
       <button class="chip" id="settings" title="Import schedule, add reservation">⋯</button>
@@ -282,13 +287,13 @@ a{color:var(--accent)}
       <div id="requests"></div>
     </section>
     <section class="pane" data-pane="feed" id="pane-feed">
-      <header><h2>Team feed</h2><span class="cnt" id="feed-cnt"></span></header>
+      <header><h2>WhatsApp updates</h2><span class="cnt" id="feed-cnt"></span></header>
       <div class="ffilter" id="ffilter">
         <button data-ch="all" aria-pressed="true">All</button>
-        <button data-ch="team" aria-pressed="false">Airbnb team</button>
-        <button data-ch="cleaning" aria-pressed="false">Cleaning team</button>
+        <button data-ch="team" aria-pressed="false" id="fl-team">Airbnb team</button>
+        <button data-ch="cleaning" aria-pressed="false" id="fl-cleaning">Cleaning team</button>
       </div>
-      <form class="compose" id="compose"><input id="composetxt" placeholder="Post a note to the team…" aria-label="Post a note"><button class="btn primary" type="submit">Post</button></form>
+      <form class="compose" id="compose"><select id="composegrp" style="width:auto" aria-label="Group"><option value="team">Airbnb team</option><option value="cleaning">Cleaning team</option></select><input id="composetxt" placeholder="Message to send by WhatsApp…" aria-label="Message"><button class="btn primary" type="submit">Send</button></form>
       <div id="feed"></div>
     </section>
   </div>
@@ -323,7 +328,11 @@ const ROLES = {manager:"Manager",attendance:"Attendance team",cleaning:"Cleaning
 const ST_LABEL = {idle:"No movement",occupied:"Occupied",checkout:"Check-out 12 PM",toclean:"Needs cleaning",cleaning:"Cleaning now",prep:"Prepare for arrival",ready:"Cleaned · ready",arrived:"Guest in"};
 const KIND = {out:"OUT",in:"IN",clean:"CLN",rq:"REQ",eta:"ETA",issue:"ISS",note:"NOTE"};
 
-const S = {res:{}, req:{}, units:{}, feed:[], mode:"connecting", role:null, db:null};
+const S = {res:{}, req:{}, units:{}, feed:[], mode:"connecting", role:"manager", db:null};
+const CFG = {groups:{team:"Airbnb Team",cleaning:"Cleaning Team"}, autoOpen:true};
+try{ Object.assign(CFG, JSON.parse(localStorage.getItem("acelence-ops-cfg")||"{}")); }catch(e){}
+function saveCfg(){ try{ localStorage.setItem("acelence-ops-cfg",JSON.stringify(CFG)); }catch(e){} }
+const grpName = g=>CFG.groups[g]||g;
 const UI = {tab:"today", ch:"all", overlay:null, popupShown:false};
 const $ = s=>document.querySelector(s);
 const esc = s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -353,7 +362,7 @@ const Local = {
 async function write(coll,id,data,merge){
   // Apply optimistically to local state, then persist.
   const key = coll==="res"?"res":coll==="req"?"req":coll==="units"?"units":null;
-  if(coll==="feed"){ S.feed.unshift(data); S.feed.sort((a,b)=>b.ts.localeCompare(a.ts)); }
+  if(coll==="feed"){ const i=S.feed.findIndex(m=>m.id===data.id); if(i>=0) S.feed[i]=data; else S.feed.unshift(data); S.feed.sort((a,b)=>b.ts.localeCompare(a.ts)); }
   else if(key){ S[key][id] = merge ? {...(S[key][id]||{}), ...data} : data; }
   render();
   if(S.mode==="live" && S.db){
@@ -411,7 +420,7 @@ function sortRes(a,b){ return (a.type===b.type?0:a.type==="out"?-1:1) || String(
 /* ---------- render ---------- */
 function render(){
   $("#dateline").textContent = klLong();
-  $("#rolename").textContent = S.role?ROLES[S.role]:"Choose role";
+  $("#rolename").textContent = ROLES[S.role]||"Manager";
   renderStats(); renderToday(); renderUnits(); renderRequests(); renderFeed(); renderTabs();
   if(UI.overlay) renderOverlay();
 }
@@ -478,10 +487,10 @@ function renderUnits(){
 function reqCard(q){
   const isIssue=q.kind==="issue";
   const acts = q.status==="new"
-    ? `<button class="btn clean sm" data-act="send" data-to="cleaning" data-id="${q.id}">→ Cleaning team</button><button class="btn primary sm" data-act="send" data-to="team" data-id="${q.id}">→ Management</button><button class="btn sm ghost" data-act="done" data-id="${q.id}">Done</button>`
+    ? `<button class="btn clean sm" data-act="send" data-to="cleaning" data-id="${q.id}">WhatsApp → ${esc(grpName("cleaning"))}</button><button class="btn primary sm" data-act="send" data-to="team" data-id="${q.id}">WhatsApp → ${esc(grpName("team"))}</button><button class="btn sm ghost" data-act="done" data-id="${q.id}">Done</button>`
     : q.status==="sent" ? `<button class="btn ok sm" data-act="done" data-id="${q.id}">Mark done</button><button class="btn sm ghost" data-act="reopen" data-id="${q.id}">Reopen</button>`
     : `<button class="btn sm ghost" data-act="reopen" data-id="${q.id}">Reopen</button><button class="btn sm ghost" data-act="delreq" data-id="${q.id}">Remove</button>`;
-  const state = q.status==="sent"?`Sent to ${q.assignedTo==="cleaning"?"Cleaning team":"Management"} · ${klTime(q.sentAt)}${q.sentBy?" by "+esc(q.sentBy):""}`:q.status==="done"?`Done · ${klTime(q.doneAt)}`:`Received ${q.receivedAt?klTime(q.receivedAt):""} · ${q.priority==="high"?"High priority":"Normal"}`;
+  const state = q.status==="sent"?`Sent to ${esc(grpName(q.assignedTo||"team"))} · ${klTime(q.sentAt)}${q.sentBy?" by "+esc(q.sentBy):""}`:q.status==="done"?`Done · ${klTime(q.doneAt)}`:`Received ${q.receivedAt?klTime(q.receivedAt):""} · ${q.priority==="high"?"High priority":"Normal"}`;
   return `<article class="rq ${q.status} ${isIssue?'issue':''}"><div class="head"><span class="tag ${isIssue?'clean':'bad'}">${isIssue?"Issue":"Request"}</span><span class="unit">${esc(q.unit||"—")}</span><span class="guest">${esc(q.guest||"")}</span><span class="src">${esc(q.source||"")}</span></div>
     <div class="txt">${esc(q.text)}</div><div class="acts">${acts}</div><div class="state">${state}</div></article>`;
 }
@@ -490,11 +499,17 @@ function renderRequests(){
   $("#req-cnt").textContent=`${openReq().length} open`;
   $("#requests").innerHTML=list.length?list.map(reqCard).join(""):`<div class="empty">No requests. New guest requirements and cleaning issues appear here.</div>`;
 }
-function waText(m){ return `https://wa.me/?text=${encodeURIComponent(`[${m.unit||"Ops"}] ${m.text} — ${m.by}, ${klTime(m.ts)}`)}`; }
+function renderOutbox(){
+  $("#outbox").innerHTML=["cleaning","team"].map(g=>{ const n=pendingFor(g).length; return `<button class="chip wa ${n?"":"zero"}" data-act="sendgroup" data-id="${g}" title="Open WhatsApp with the pending updates for ${esc(grpName(g))}"><span class="dot" style="background:#25D366"></span><span>${esc(grpName(g))}</span><span class="n">${n}</span></button>`; }).join("");
+  $("#fl-team").textContent=grpName("team"); $("#fl-cleaning").textContent=grpName("cleaning");
+  const cg=$("#composegrp"); if(cg){ cg.options[0].text=grpName("team"); cg.options[1].text=grpName("cleaning"); }
+}
 function renderFeed(){
-  const list=S.feed.filter(m=>UI.ch==="all"||m.channel==="all"||m.channel===UI.ch);
-  $("#feed-cnt").textContent=`${list.length} today`;
-  $("#feed").innerHTML=list.length?list.map(m=>`<div class="msg"><div class="k ${esc(m.kind)}">${KIND[m.kind]||"·"}</div><div class="b"><div class="t">${esc(m.text)}</div><div class="m"><span>${klTime(m.ts)}</span><span class="ch">${m.channel==="cleaning"?"Cleaning team":m.channel==="team"?"Airbnb team":"Both teams"}</span><span>${esc(m.by)}</span><a href="${waText(m)}" target="_blank" rel="noopener">WhatsApp</a><button data-act="copy" data-text="${esc(m.text)}">Copy</button></div></div></div>`).join(""):`<div class="empty">Every check-out, arrival, cleaning update and request posts here automatically.</div>`;
+  renderOutbox();
+  const list=S.feed.filter(m=>UI.ch==="all"||m.channel===UI.ch);
+  const pend=S.feed.filter(m=>!m.wa).length;
+  $("#feed-cnt").textContent=`${list.length} today${pend?" · "+pend+" not yet on WhatsApp":""}`;
+  $("#feed").innerHTML=list.length?list.map(m=>`<div class="msg ${m.wa?"":"pending"}"><div class="k ${esc(m.kind)}">${KIND[m.kind]||"·"}</div><div class="b"><div class="t"><b>${esc(m.title||"")}</b>${esc(m.body||m.text||"")}</div><div class="m"><span>${klTime(m.ts)}</span><span class="ch">${esc(grpName(m.channel))}</span>${m.wa?`<span>on WhatsApp ${klTime(m.wa)}</span>`:`<span style="color:var(--warn);font-weight:600">not sent</span>`}<a href="${waUrl(waFormat(m))}" target="_blank" rel="noopener" data-act="waone" data-id="${m.id}">${m.wa?"Send again":"Send to WhatsApp"}</a><button data-act="copy" data-text="${esc(waFormat(m))}">Copy</button></div></div></div>`).join(""):`<div class="empty">Every check-out, arrival, cleaning update and request is composed here and handed to WhatsApp.</div>`;
   document.querySelectorAll("#ffilter button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.ch===UI.ch));
 }
 function renderTabs(){
@@ -505,22 +520,37 @@ function renderTabs(){
 }
 
 /* ---------- actions ---------- */
-function post(kind,channel,text,unit){ return write("feed",null,{id:uid("m"),ts:nowISO(),kind,channel,text,unit:unit||"",by:roleName(),date:TODAY}); }
-async function markOut(id){ const r=S.res[id]; if(!r)return; await write("res",id,{checkedOut:nowISO()},true); await post("out","all",`CHECKED OUT · ${r.unit} · ${r.guest} at ${klTime()}. Unit is free for cleaning.`,r.unit); toast(`${r.unit} checked out · cleaning team notified`); }
-async function undoOut(id){ const r=S.res[id]; await write("res",id,{checkedOut:null},true); await post("out","all",`Correction: ${r.unit} · ${r.guest} has NOT checked out yet.`,r.unit); }
-async function markIn(id){ const r=S.res[id]; if(!r)return; await write("res",id,{arrived:nowISO()},true); await post("in","team",`ARRIVED · ${r.unit} · ${r.guest} (${r.pax||""}) at ${klTime()}. Attendance team please attend.`,r.unit); toast(`${r.guest.split(" ")[0]} arrived · Airbnb team notified`); }
-async function undoIn(id){ const r=S.res[id]; await write("res",id,{arrived:null},true); await post("in","team",`Correction: ${r.unit} · ${r.guest} has not arrived yet.`,r.unit); }
-async function setEta(id,eta,note){ const r=S.res[id]; const was=r.eta; await write("res",id,{eta,etaNote:note},true); await post("eta","team",`ARRIVAL UPDATE · ${r.unit} · ${r.guest} now expected ${eta}${was&&was!==eta?" (was "+was+")":""}.${note?" "+note:""}`,r.unit); toast("Arrival time updated · team notified"); }
-async function unitStatus(code,status){
-  const u=S.units[code]||{code}; await write("units",code,{...u,code,status,date:TODAY,updatedAt:nowISO(),updatedBy:roleName()});
-  const ins=resFor(code,"in"); const nxt=ins.length?` Next guest: ${ins[0].guest} ${ins[0].eta?"at "+ins[0].eta:""}.`:"";
-  if(status==="cleaning") await post("clean","all",`CLEANING STARTED · ${code} at ${klTime()} by ${roleName()}.`,code);
-  if(status==="ready"){ await post("clean","all",`CLEANING DONE · ${code} at ${klTime()} by ${roleName()}. Unit is ready.${nxt}`,code); toast(`${code} ready · Airbnb team notified`); }
-  if(status==="toclean") await post("clean","cleaning",`${code} needs cleaning again (reopened by ${roleName()}).`,code);
+/* WhatsApp delivery: no server, so the app composes the message and hands it to WhatsApp with the
+   text pre-filled. You pick the group once and tap send. Must be triggered synchronously from a tap
+   (Safari blocks it otherwise), so every action opens WhatsApp BEFORE its first await. */
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.platform) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+function waUrl(text){ return (IS_IOS?"whatsapp://send?text=":"https://wa.me/?text=")+encodeURIComponent(text); }
+function waOpen(text){ const a=document.createElement("a"); a.href=waUrl(text); a.target="_blank"; a.rel="noopener"; document.body.appendChild(a); a.click(); a.remove(); }
+function waFormat(m){ return `*${m.title}*\n${m.body}`; }
+function pendingFor(g){ return S.feed.filter(m=>m.channel===g&&!m.wa).sort((a,b)=>a.ts.localeCompare(b.ts)); }
+async function markSent(ids){ const t=nowISO(); for(const id of ids){ const m=S.feed.find(x=>x.id===id); if(m) await write("feed",id,{...m,wa:t}); } }
+function sendGroup(g){ const list=pendingFor(g); if(!list.length)return; waOpen(list.map(waFormat).join("\n\n")); markSent(list.map(m=>m.id)); toast(`${list.length} update${list.length>1?"s":""} handed to WhatsApp · choose "${grpName(g)}" and send`); }
+function post(kind,channel,title,body,unit,notify=true){
+  const m={id:uid("m"),ts:nowISO(),kind,channel,title,body,text:title+" — "+body,unit:unit||"",by:roleName(),date:TODAY,wa:null};
+  if(notify&&CFG.autoOpen){ waOpen(waFormat(m)); m.wa=m.ts; }
+  return write("feed",m.id,m);
 }
-async function sendReq(id,to){ const q=S.req[id]; if(!q)return; await write("req",id,{status:"sent",assignedTo:to,sentAt:nowISO(),sentBy:roleName()},true);
-  await post(q.kind==="issue"?"issue":"rq",to,`${q.kind==="issue"?"ISSUE":"REQUEST"} · ${q.unit||"—"} · ${q.guest?q.guest+": ":""}${q.text} — please action.`,q.unit); toast(`Sent to ${to==="cleaning"?"Cleaning team":"Management"}`); }
-async function doneReq(id){ const q=S.req[id]; await write("req",id,{status:"done",doneAt:nowISO(),doneBy:roleName()},true); if(q.status==="sent") await post(q.kind==="issue"?"issue":"rq",q.assignedTo||"team",`DONE · ${q.unit||"—"} · ${q.text.slice(0,80)}${q.text.length>80?"…":""} — by ${roleName()}.`,q.unit); }
+async function markOut(id){ const r=S.res[id]; if(!r)return; const p=post("out","cleaning",`CHECKED OUT · ${r.unit}`,`${r.guest} (${r.pax||""}) left at ${klTime()}. Unit is free for cleaning.${resFor(r.unit,"in").length?" Next guest arrives today "+(resFor(r.unit,"in")[0].eta||"")+".":""}`,r.unit); await write("res",id,{checkedOut:nowISO()},true); await p; toast(`${r.unit} checked out`); }
+async function undoOut(id){ const r=S.res[id]; const p=post("out","cleaning",`CORRECTION · ${r.unit}`,`${r.guest} has NOT checked out yet. Hold cleaning.`,r.unit); await write("res",id,{checkedOut:null},true); await p; }
+async function markIn(id){ const r=S.res[id]; if(!r)return; const p=post("in","team",`ARRIVED · ${r.unit}`,`${r.guest} (${r.pax||""}) arrived at ${klTime()}. Attendance team please attend to the guest.`,r.unit); await write("res",id,{arrived:nowISO()},true); await p; toast(`${r.guest.split(" ")[0]} arrived`); }
+async function undoIn(id){ const r=S.res[id]; const p=post("in","team",`CORRECTION · ${r.unit}`,`${r.guest} has not arrived yet.`,r.unit); await write("res",id,{arrived:null},true); await p; }
+async function setEta(id,eta,note){ const r=S.res[id]; const was=r.eta; const p=post("eta","team",`ARRIVAL UPDATE · ${r.unit}`,`${r.guest} now expected ${eta}${was&&was!==eta?" (was "+was+")":""}.${note?" "+note:""}`,r.unit); await write("res",id,{eta,etaNote:note},true); await p; toast("Arrival time updated"); }
+async function unitStatus(code,status){
+  const u=S.units[code]||{code}; const ins=resFor(code,"in"); const nxt=ins.length?` Next guest: ${ins[0].guest} ${ins[0].eta?"at "+ins[0].eta:""}.`:"";
+  let p=null;
+  if(status==="ready") p=post("clean","team",`UNIT READY · ${code}`,`Cleaning done at ${klTime()}. Unit is ready for check-in.${nxt}`,code);
+  if(status==="toclean") p=post("clean","cleaning",`CLEANING NEEDED · ${code}`,`Please clean ${code} again.${nxt}`,code);
+  await write("units",code,{...u,code,status,date:TODAY,updatedAt:nowISO(),updatedBy:roleName()});
+  if(p) await p; if(status==="ready") toast(`${code} marked ready`); if(status==="cleaning") toast(`${code} cleaning in progress`);
+}
+async function sendReq(id,to){ const q=S.req[id]; if(!q)return; const p=post(q.kind==="issue"?"issue":"rq",to,`${q.kind==="issue"?"ISSUE":"GUEST REQUEST"} · ${q.unit||"unit ?"}`,`${q.guest?q.guest+": ":""}${q.text}${q.priority==="high"?" (HIGH PRIORITY)":""} — please action.`,q.unit);
+  await write("req",id,{status:"sent",assignedTo:to,sentAt:nowISO(),sentBy:roleName()},true); await p; toast(`Sent to ${grpName(to)}`); }
+async function doneReq(id){ const q=S.req[id]; const p=q.status==="sent"?post(q.kind==="issue"?"issue":"rq",q.assignedTo||"team",`DONE · ${q.unit||"—"}`,`${q.text.slice(0,90)}${q.text.length>90?"…":""}`,q.unit):null; await write("req",id,{status:"done",doneAt:nowISO(),doneBy:roleName()},true); if(p) await p; }
 async function addReq(o){ const id=uid("rq"); await write("req",id,{id,status:"new",receivedAt:nowISO(),priority:"normal",...o}); toast(o.kind==="issue"?"Issue logged":"Request added"); return id; }
 
 /* ---------- overlays ---------- */
@@ -529,13 +559,13 @@ function closeOverlay(){ UI.overlay=null; $("#overlay").innerHTML=""; }
 function sheet(inner){ $("#overlay").innerHTML=`<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" style="position:relative">${inner}<button class="close" data-close aria-label="Close">×</button></div></div>`; }
 function renderOverlay(){
   const o=UI.overlay; if(!o)return;
-  if(o.type==="role") return sheet(`<h2>Who is using this device?</h2><div class="sub">Your updates in the team feed are signed with this name.</div><div class="rolepick">
+  if(o.type==="role") return sheet(`<h2>Who is using this device?</h2><div class="sub">Only affects the name recorded against each update.</div><div class="rolepick">
     <button data-role="manager"><b>Manager</b><span>Full picture. Send requests to either team.</span></button>
     <button data-role="attendance"><b>Attendance team</b><span>Arrivals, check-outs, guest arrival times.</span></button>
     <button data-role="cleaning"><b>Cleaning team</b><span>Mark units cleaned, report issues found during cleaning.</span></button></div>`);
-  if(o.type==="popup"){ const list=openReq(); return sheet(`<h2>${list.length} item${list.length>1?"s":""} need${list.length>1?"":"s"} action</h2><div class="sub">Guest requests from Airbnb messages and issues raised by the cleaning team. Send each one to the right team, or mark it done.</div>
+  if(o.type==="popup"){ const list=openReq(); return sheet(`<h2>${list.length} item${list.length>1?"s":""} need${list.length>1?"":"s"} action</h2><div class="sub">Guest requests from Airbnb messages and issues raised by the cleaning team. One tap composes the WhatsApp message for the right group.</div>
     ${list.map(q=>`<div class="popup"><div class="h"><span class="tag ${q.kind==='issue'?'clean':'bad'}">${q.kind==="issue"?"Issue":"Request"}</span><span class="unit">${esc(q.unit||"—")}</span><span>${esc(q.guest||"")}</span></div><div style="margin:6px 0 8px">${esc(q.text)}</div>
-      <div class="row"><button class="btn clean sm" data-act="send" data-to="cleaning" data-id="${q.id}">→ Cleaning team</button><button class="btn primary sm" data-act="send" data-to="team" data-id="${q.id}">→ Management</button><button class="btn sm ghost" data-act="done" data-id="${q.id}">Done</button></div></div>`).join("")}
+      <div class="row"><button class="btn clean sm" data-act="send" data-to="cleaning" data-id="${q.id}">WhatsApp → ${esc(grpName("cleaning"))}</button><button class="btn primary sm" data-act="send" data-to="team" data-id="${q.id}">WhatsApp → ${esc(grpName("team"))}</button><button class="btn sm ghost" data-act="done" data-id="${q.id}">Done</button></div></div>`).join("")}
     <div class="row" style="margin-top:14px"><button class="btn" data-close>Later</button></div>`); }
   if(o.type==="res"){ const r=S.res[o.id]; if(!r)return closeOverlay(); const st=unitState(r.unit); const reqs=Object.values(S.req).filter(q=>q.resId===r.id||q.unit===r.unit);
     return sheet(`<div class="label">${r.type==="out"?"Check-out":"Check-in"} · ${esc(r.stay||"")}</div><h2>${esc(r.guest)}</h2><div class="sub"><span class="mono">${esc(r.unit==="UNMAPPED"?"Unit not mapped":r.unit)}</span> · ${esc(r.listing||"")}</div>
@@ -567,8 +597,12 @@ function renderOverlay(){
       <div class="field"><label for="rq-text">${isIssue?"What's wrong?":"Request"}</label><textarea id="rq-text" required placeholder="${isIssue?"e.g. Ants in the kitchen near the bin. Aircon remote missing.":"e.g. Guest asks for a baby cot and late check-in at 1:30 AM."}"></textarea></div>
       <div class="field"><label for="rq-src">Source</label><select id="rq-src">${(isIssue?["Cleaning team","Airbnb cleaning chat","Manual"]:["Airbnb message","Hotmail","WhatsApp","Manual"]).map(s=>`<option>${s}</option>`).join("")}</select></div>
       <div class="field"><label><input type="checkbox" id="rq-high" style="width:auto"> High priority</label></div>
-      <div class="row" style="margin-top:12px"><button class="btn primary" type="submit">Add to action list</button>${isIssue?`<button class="btn clean" type="submit" data-sendto="team">Add &amp; send to management</button>`:""}<button class="btn" type="button" data-close>Cancel</button></div></form>`); }
+      <div class="row" style="margin-top:12px"><button class="btn primary" type="submit">Add to action list</button>${isIssue?`<button class="btn clean" type="submit" data-sendto="team">Add &amp; WhatsApp management</button>`:""}<button class="btn" type="button" data-close>Cancel</button></div></form>`); }
   if(o.type==="settings"){ return sheet(`<h2>Data &amp; import</h2><div class="sub">Mode: <b>${S.mode==="live"?"Live, shared with the team":"This device only"}</b> · Today ${TODAY} (Kuala Lumpur)</div>
+      <div class="sec"><div class="label" style="margin-bottom:6px">WhatsApp groups</div><div class="small muted" style="margin-bottom:6px">Names as they appear in your WhatsApp, so the buttons match what you tap in the chat picker.</div>
+      <form id="cfgform"><div class="row"><div class="field" style="flex:1"><label for="g-team">Airbnb team group</label><input id="g-team" value="${esc(CFG.groups.team)}"></div><div class="field" style="flex:1"><label for="g-clean">Cleaning team chat</label><input id="g-clean" value="${esc(CFG.groups.cleaning)}"></div></div>
+      <div class="field"><label><input type="checkbox" id="g-auto" style="width:auto" ${CFG.autoOpen?"checked":""}> Open WhatsApp immediately after each update (off = collect updates and send them in one batch from the header buttons)</label></div>
+      <div class="row" style="margin-top:8px"><button class="btn primary" type="submit">Save</button></div></form></div>
       <div class="sec"><div class="label" style="margin-bottom:6px">Import today's schedule</div><div class="small muted" style="margin-bottom:6px">Paste the rows from the daily schedule file (columns: Type, Unit Number, Listing Name, Guest, Date, Note). Existing reservations with the same confirmation code are updated, not duplicated.</div>
       <form id="impform"><textarea id="imp" placeholder="CHECK-IN,T2-11-09,Executive King Suite…,Ihab (2 adults, 1 child),14/09/26,Stay Sep 14 - Sep 19 | HMH98BY4B9"></textarea><div class="row" style="margin-top:8px"><button class="btn primary" type="submit">Import</button></div></form></div>
       <div class="sec"><div class="label" style="margin-bottom:6px">Add one reservation</div><form id="oneform"><div class="row"><select id="one-type" style="width:auto"><option value="in">Check-in</option><option value="out">Check-out</option></select><select id="one-unit" style="width:auto">${UNITS.map(u=>`<option>${esc(u.code)}</option>`).join("")}</select></div>
@@ -576,7 +610,7 @@ function renderOverlay(){
       <div class="field"><label for="one-note">Note</label><input id="one-note"></div><div class="row" style="margin-top:10px"><button class="btn primary" type="submit">Add</button></div></form></div>
       <div class="sec"><div class="label" style="margin-bottom:6px">Reset</div><div class="row"><button class="btn bad sm" data-act="clearday">Clear today's check-out / arrival marks</button>${S.mode==="local"?`<button class="btn sm" data-act="reseed">Reload demo data</button>`:""}</div></div>`); }
 }
-function firstPopup(){ if(UI.popupShown)return; UI.popupShown=true; if(!S.role){ openSheet({type:"role"}); return; } if(openReq().length) openSheet({type:"popup"}); }
+function firstPopup(){ if(UI.popupShown)return; UI.popupShown=true; if(openReq().length) openSheet({type:"popup"}); }
 
 /* ---------- schedule import ---------- */
 function parseCSV(text){ const rows=[];let row=[],cell="",q=false; for(let i=0;i<text.length;i++){const c=text[i]; if(q){ if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; } else { if(c==='"')q=true; else if(c===","){row.push(cell);cell="";} else if(c==="\n"||c==="\r"){ if(c==="\r"&&text[i+1]==="\n")i++; row.push(cell);rows.push(row);row=[];cell=""; } else cell+=c; } } if(cell.length||row.length){row.push(cell);rows.push(row);} return rows; }
@@ -595,7 +629,7 @@ function importSchedule(text){
 document.addEventListener("click",async e=>{
   const act=e.target.closest("[data-act]"); const close=e.target.closest("[data-close]"); const opn=e.target.closest("[data-open]"); const role=e.target.closest("[data-role]"); const tab=e.target.closest("[data-tab]"); const ch=e.target.closest("#ffilter [data-ch]");
   if(close&&(e.target===close||close.classList.contains("close")||close.tagName==="BUTTON")){ closeOverlay(); return; }
-  if(role){ S.role=role.dataset.role; try{localStorage.setItem("acelence-ops-role",S.role);}catch(x){} closeOverlay(); render(); if(openReq().length) openSheet({type:"popup"}); return; }
+  if(role){ S.role=role.dataset.role; try{localStorage.setItem("acelence-ops-role",S.role);}catch(x){} closeOverlay(); render(); return; }
   if(tab){ UI.tab=tab.dataset.tab; renderTabs(); return; }
   if(ch){ UI.ch=ch.dataset.ch; renderFeed(); return; }
   if(act){ e.stopPropagation(); const id=act.dataset.id; const a=act.dataset.act;
@@ -611,6 +645,8 @@ document.addEventListener("click",async e=>{
     if(a==="newreq")return openSheet({type:"newreq",res:act.dataset.res,unit:act.dataset.unit});
     if(a==="newissue")return openSheet({type:"newreq",kind:"issue",unit:act.dataset.unit});
     if(a==="copy"){ try{ await navigator.clipboard.writeText(act.dataset.text); toast("Copied"); }catch(x){ toast("Copy not available"); } return; }
+    if(a==="sendgroup"){ sendGroup(id); return; }
+    if(a==="waone"){ markSent([id]); return; } /* the link itself opens WhatsApp */
     if(a==="clearday"){ if(confirm("Clear all check-out and arrival marks for today?")){ for(const r of todayRes()) await write("res",r.id,{checkedOut:null,arrived:null},true); closeOverlay(); } return; }
     if(a==="reseed"){ if(confirm("Reload the demo data on this device?")){ localStorage.removeItem(LS_KEY); Local.load(); render(); closeOverlay(); } return; }
     return; }
@@ -623,10 +659,11 @@ document.addEventListener("click",async e=>{
 });
 document.addEventListener("submit",async e=>{
   const f=e.target; e.preventDefault();
-  if(f.id==="compose"){ const t=$("#composetxt").value.trim(); if(!t)return; $("#composetxt").value=""; await post("note",UI.ch==="all"?"all":UI.ch,t); return; }
+  if(f.id==="compose"){ const t=$("#composetxt").value.trim(); if(!t)return; $("#composetxt").value=""; await post("note",$("#composegrp").value,`NOTE`,t); return; }
+  if(f.id==="cfgform"){ CFG.groups.team=$("#g-team").value.trim()||"Airbnb Team"; CFG.groups.cleaning=$("#g-clean").value.trim()||"Cleaning Team"; CFG.autoOpen=$("#g-auto").checked; saveCfg(); render(); toast("Saved"); return; }
   if(f.id==="etaform"){ await setEta(UI.overlay.id,$("#eta-t").value.trim(),$("#eta-n").value.trim()); closeOverlay(); return; }
   if(f.id==="amtform"){ const v=$("#amt").value; await write("res",UI.overlay.id,{amount:v===""?null:Number(v)},true); openSheet({type:"res",id:UI.overlay.id}); return; }
-  if(f.id==="assignform"){ const id=UI.overlay.id; const r=S.res[id]; const code=$("#asg").value; await write("res",id,{unit:code,unitConfirmed:true,flags:(r.flags||[]).filter(x=>x!=="unmapped")},true); await post("note","all",`${r.guest} (${r.type==="out"?"check-out":"check-in"}) confirmed as unit ${code}.`,code); openSheet({type:"res",id}); return; }
+  if(f.id==="assignform"){ const id=UI.overlay.id; const r=S.res[id]; const code=$("#asg").value; await write("res",id,{unit:code,unitConfirmed:true,flags:(r.flags||[]).filter(x=>x!=="unmapped")},true); await post("note","team",`UNIT CONFIRMED · ${code}`,`${r.guest} (${r.type==="out"?"check-out":"check-in"}) is unit ${code}.`,code,false); openSheet({type:"res",id}); return; }
   if(f.id==="reqform"){ const sub=e.submitter; const o={unit:$("#rq-unit").value,guest:$("#rq-guest")?.value.trim()||"",text:$("#rq-text").value.trim(),source:$("#rq-src").value,priority:$("#rq-high").checked?"high":"normal",kind:UI.overlay.kind||"request",resId:UI.overlay.res||null,raisedBy:roleName()};
     if(!o.text)return; const id=await addReq(o); if(sub?.dataset.sendto) await sendReq(id,sub.dataset.sendto); closeOverlay(); return; }
   if(f.id==="impform"){ const n=importSchedule($("#imp").value); toast(n?`${n} reservation${n>1?"s":""} imported`:"No CHECK-IN / CHECKOUT rows found"); if(n)closeOverlay(); return; }
@@ -637,7 +674,7 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&UI.overlay) closeO
 function toast(t){ const el=document.createElement("div"); el.className="toast"; el.textContent=t; $("#toasts").appendChild(el); $("#live").textContent=t; setTimeout(()=>el.remove(),2600); }
 function tick(){ $("#clock").innerHTML=`${klTime()}<small>Kuala Lumpur · ${S.mode==="live"?"live":"local"}</small>`; }
 setInterval(tick,15000); tick();
-try{ S.role=localStorage.getItem("acelence-ops-role")||null; }catch(e){}
+try{ S.role=localStorage.getItem("acelence-ops-role")||"manager"; }catch(e){}
 if(!window.claude && "serviceWorker" in navigator && location.protocol.startsWith("http")){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 boot();
 </script>
